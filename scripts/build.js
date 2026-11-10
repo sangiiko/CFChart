@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { cpSync, existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { build as bundle } from 'esbuild';
 import { build as buildPages } from 'vite';
@@ -33,4 +33,13 @@ for (const page of readdirSync('dist').filter(file => file.endsWith('.html'))) {
     }
   }
 }
-console.log('\nCFChart is ready. Load dist/manifest.json in Firefox; reload the Codeforces tab after installation.');
+
+// Build Chrome-compatible package in dist-chrome/
+rmSync('dist-chrome', { recursive: true, force: true });
+cpSync('dist', 'dist-chrome', { recursive: true });
+const chromeManifest = { ...manifest };
+delete chromeManifest.browser_specific_settings;
+chromeManifest.background = { service_worker: 'background.js' };
+writeFileSync('dist-chrome/manifest.json', JSON.stringify(chromeManifest, null, 2));
+
+console.log('\nCFChart is ready.\n- For Firefox: Load dist/manifest.json in about:debugging\n- For Chrome / Brave / Edge: Load dist-chrome/ as Unpacked Extension in chrome://extensions');

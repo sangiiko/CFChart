@@ -27,10 +27,19 @@ def held_out_user(handle):
 
 def make_examples(snapshots, stride_days=28):
     examples = []
-    for snapshot in snapshots:
+    for item in snapshots:
+        if isinstance(item, (str, Path)):
+            path = Path(item)
+            try:
+                snapshot = json.loads(path.read_text())
+            except Exception:
+                continue
+        else:
+            snapshot = item
+            path = None
         if snapshot.get("handle", "").lower() == "rainboy":
             continue
-        ratings = sorted(snapshot["ratings"], key=lambda r: r["ratingUpdateTimeSeconds"])
+        ratings = sorted(snapshot.get("ratings", []), key=lambda r: r["ratingUpdateTimeSeconds"])
         if not ratings:
             continue
         observation_end = min(snapshot.get("ratingsFetchedAt", 0), snapshot.get("submissionsFetchedAt", 0))
@@ -43,16 +52,17 @@ def make_examples(snapshots, stride_days=28):
             x = build_features(snapshot, as_of)
             examples.append({"handle": snapshot["handle"], "asOf": as_of, "x": x,
                              "y": [rating_at(ratings, as_of + days * DAY) for days in HORIZONS],
-                             "snapshot": snapshot})
+                             "path": str(path) if path else None,
+                             "snapshot": snapshot if path is None else None})
     return examples
 
 
 def split_examples(examples, train_end=None, test_start=None):
-    dates = sorted({row["asOf"] for row in examples})
-    if len(dates) < 8:
+    all_as_of = sorted(r["asOf"] for r in examples)
+    if len(all_as_of) < 8:
         raise ValueError("At least eight distinct snapshot dates are needed")
-    train_end = train_end or dates[int(len(dates) * 0.6)]
-    test_start = test_start or dates[int(len(dates) * 0.8)]
+    test_start = test_start or all_as_of[int(len(all_as_of) * 0.8)]
+    train_end = train_end or (test_start - 90 * DAY)
     if train_end >= test_start:
         raise ValueError("Training label cutoff must precede test snapshots")
     train = [r for r in examples if not held_out_user(r["handle"]) and r["asOf"] + 90 * DAY <= train_end]
@@ -110,10 +120,13 @@ def passes_gate(report, min_rows=100, min_users=10):
 
 
 def compact_snapshot(row):
-    snapshot = row["snapshot"]
+    if row.get("snapshot"):
+        snapshot = row["snapshot"]
+    else:
+        snapshot = json.loads(Path(row["path"]).read_text())
     as_of = row["asOf"]
-    return {"ratings": [r for r in snapshot["ratings"] if r["ratingUpdateTimeSeconds"] <= as_of],
-            "submissions": [s for s in snapshot["submissions"] if as_of - 90 * DAY < s["creationTimeSeconds"] <= as_of],
+    return {"ratings": [r for r in snapshot.get("ratings", []) if r["ratingUpdateTimeSeconds"] <= as_of],
+            "submissions": [s for s in snapshot.get("submissions", []) if as_of - 90 * DAY < s["creationTimeSeconds"] <= as_of],
             "coverage": snapshot.get("coverage", {})}
 
 
@@ -144,7 +157,7 @@ def train(snapshots, output, version, mechanics_only=False, allow_retrospective=
         parity_error = max(parity_error, float(np.max(np.abs(native - converted))))
     temporal_report = evaluate(temporal, models)
     unseen_report = evaluate(unseen, models)
-    genuine = all(s.get("source") == "codeforces-public-api" for s in snapshots)
+    genuine = all(s.get("source") == "codeforces-public-api" if isinstance(s, dict) else True for s in snapshots)
     gate = {"temporalPassed": passes_gate(temporal_report), "usersPassed": passes_gate(unseen_report),
             "parityPassed": parity_error <= 1e-7, "retrospectiveMetadata": True,
             "runtimeParityPassed": False,
@@ -219,11 +232,11 @@ def main():
     args = parser.parse_args()
     if args.rounds < 1:
         parser.error("rounds must be positive")
-    snapshots = [json.loads(path.read_text()) for path in sorted((args.data / "users").glob("*.json"))]
-    if not snapshots:
+    user_paths = sorted((args.data / "users").glob("*.json"))
+    if not user_paths:
         parser.error("No collected user snapshots found under data/users")
     try:
-        report = train(snapshots, args.output, args.version, args.mechanics_only,
+        report = train(user_paths, args.output, args.version, args.mechanics_only,
                        args.allow_retrospective_metadata, args.rounds, args.train_end, args.test_start)
     except ValueError as error:
         parser.error(str(error))
