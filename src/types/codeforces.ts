@@ -39,6 +39,15 @@ export interface CFProblem {
   type?: string;
   rating?: number;
   tags: string[];
+  solvedCount?: number;
+}
+
+export interface CFContest {
+  id: number;
+  name: string;
+  type: string;
+  phase: string;
+  startTimeSeconds?: number;
 }
 
 export interface CFSubmission {
@@ -117,12 +126,19 @@ export interface MilestoneTarget {
   achieved: boolean;
 }
 
+export type RecSlot = 'upsolve' | 'core' | 'stretch' | 'warmup' | 'revisit';
+
 export interface RecommendedProblem {
   contestId: number;
   index: string;
   name: string;
   rating: number;
   tags: string[];
-  type: 'warmup' | 'challenge';
+  type: 'warmup' | 'challenge'; // kept for backward compatibility
+  slot: RecSlot;
+  slotLabel: string;
+  pSolve: number; // e.g. 0.62 (62%)
+  reasons: string[]; // e.g. ["Targeting weak topic: graphs", "Recent uncompleted contest problem"]
+  qualityScore: number;
   url: string;
 }

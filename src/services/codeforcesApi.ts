@@ -161,9 +161,17 @@ export function createCodeforcesApi(options: ApiOptions = {}) {
       }));
     },
     async fetchProblemCatalog(): Promise<CFProblem[]> {
-      const result = await request<{ problems: CFProblem[] }>('problemset.problems');
-      if (!Array.isArray(result.problems)) throw new CodeforcesApiError('Codeforces returned an invalid problem catalog.', 'invalid_response');
-      return result.problems.filter(problem => problem.contestId && problem.index && Number.isFinite(problem.rating) && Array.isArray(problem.tags));
+      const result = await request<{ problems: CFProblem[]; problemStatistics: { contestId?: number; index: string; solvedCount: number }[] }>('problemset.problems');
+      if (!Array.isArray(result.problems) || !Array.isArray(result.problemStatistics)) throw new CodeforcesApiError('Codeforces returned an invalid problem catalog.', 'invalid_response');
+      const stats = new Map(result.problemStatistics.map(s => [`${s.contestId}-${s.index}`, s.solvedCount]));
+      return result.problems
+        .filter(problem => problem.contestId && problem.index && Number.isFinite(problem.rating) && Array.isArray(problem.tags))
+        .map(problem => ({ ...problem, solvedCount: stats.get(`${problem.contestId}-${problem.index}`) }));
+    },
+    async fetchContestList(): Promise<CFContest[]> {
+      const contests = await request<CFContest[]>('contest.list', { gym: false });
+      if (!Array.isArray(contests)) throw new CodeforcesApiError('Codeforces returned an invalid contest list.', 'invalid_response');
+      return contests;
     },
   };
 }

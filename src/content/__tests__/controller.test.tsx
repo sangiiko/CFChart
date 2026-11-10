@@ -86,7 +86,7 @@ describe('in-page content integration', () => {
     expect(shadow('cfchart-personal-host').textContent).toContain('Set up CFChart');
   });
   it('rechecks solved history explicitly and removes recommendations until full coverage returns', async () => {
-    client.getPractice.mockImplementation(async (_handle: string, options?: { resetHistory?: boolean }) => options?.resetHistory ? { ...practice, coverage: { complete: false, loaded: 1000 }, recommendations: [] } : { ...practice, recommendations: [{ contestId: 1, index: 'A', name: 'Suggested fixture', rating: 1200, tags: [], type: 'warmup', url: '/problemset/problem/1/A' }] });
+    client.getPractice.mockImplementation(async (_handle: string, options?: { resetHistory?: boolean }) => options?.resetHistory ? { ...practice, coverage: { complete: false, loaded: 1000 }, recommendations: [] } : { ...practice, recommendations: [{ contestId: 1, index: 'A', name: 'Suggested fixture', rating: 1200, tags: [], type: 'warmup', slot: 'core', slotLabel: 'Core', pSolve: 0.5, reasons: ['Test reason'], qualityScore: 1, url: '/problemset/problem/1/A' }] });
     await start();
     await act(async () => { shadow('cfchart-personal-host').querySelector<HTMLButtonElement>('.cf-habit-pill')!.click(); });
     const personal = shadow('cfchart-personal-host');
@@ -95,7 +95,7 @@ describe('in-page content integration', () => {
     await flush();
     expect(client.getPractice).toHaveBeenCalledWith('myHandle', { force: true, syncMore: false, resetHistory: true });
     expect(personal.textContent).not.toContain('Suggested fixture');
-    expect(personal.textContent).toContain('1000 submissions synced');
+    expect(personal.textContent).toContain('1,000 submissions synced');
   });
   it('remounts exactly once after reinjection', async () => {
     await start(); await start();

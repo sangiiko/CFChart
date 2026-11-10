@@ -1,8 +1,10 @@
 import type { CachedCatalog, CachedPractice, HistoryCoverage, Preferences, PracticeSnapshot, ProfileSnapshot, RequestOptions } from '../types/app';
-import type { CFProblem, CFRatingChange, CFSubmission, CFUser, RecommendedProblem } from '../types/codeforces';
+import type { CFProblem, CFRatingChange, CFSubmission, CFUser, RecommendedProblem, CFContest } from '../types/codeforces';
 import { codeforcesApi, getProblemKey, getProblemUrl, normalizeHandle } from './codeforcesApi';
 import { storageService } from './storage';
 import { calculateHabitProgress } from './habitTracker';
+import { enrichCatalog } from '../recommender/catalog';
+import { selectRecommendationsV2 } from '../recommender';
 
 export const HISTORY_PAGE_SIZE = 1000;
 const PROFILE_TTL = 5 * 60 * 1000;
@@ -186,16 +188,19 @@ export function createDataBroker(options: BrokerOptions = {}) {
     return operation;
   }
 
-  async function getCatalog(): Promise<CachedCatalog & { error?: string }> {
+  async function getCatalog(): Promise<CachedCatalog & { error?: string; contests?: CFContest[] }> {
     if (catalogInFlight) return catalogInFlight;
     const operation = (async () => {
       const cached = await storage.getValue<CachedCatalog>('cfchart:catalog');
       if (cached && now() - cached.updatedAt < CATALOG_TTL) return cached;
       try {
-        const problems = await api.fetchProblemCatalog();
+        const [problems, contests] = await Promise.all([
+          api.fetchProblemCatalog(),
+          api.fetchContestList ? api.fetchContestList().catch(() => [] as CFContest[]) : Promise.resolve([] as CFContest[])
+        ]);
         const result = { problems, updatedAt: now() };
         await storage.setValue('cfchart:catalog', result);
-        return result;
+        return { ...result, contests };
       } catch (error) {
         if (cached) return { ...cached, error: `Using the cached problem catalog: ${errorMessage(error)}` };
         throw error;
@@ -243,20 +248,45 @@ export function createDataBroker(options: BrokerOptions = {}) {
           errors.push(errorMessage(error));
         }
       }
+      // Auto background sync: if incomplete, trigger syncMore asynchronously
+      if (!cached.complete && !request.syncMore) {
+        setTimeout(() => {
+          getPractice(handle, { syncMore: true }).catch(console.warn);
+        }, 100);
+      }
+
       const preferences = await getPreferences();
       const coverage = historyCoverage(cached);
       let recommendations: RecommendedProblem[] = [];
-      if (coverage.complete) {
-        const [profile, catalog] = await Promise.allSettled([getProfile(handle), getCatalog()]);
-        if (profile.status === 'rejected') errors.push(errorMessage(profile.reason));
-        if (catalog.status === 'rejected') errors.push(`Recommendations: ${errorMessage(catalog.reason)}`);
-        if (profile.status === 'fulfilled' && catalog.status === 'fulfilled') {
-          if (profile.value.error) errors.push(profile.value.error);
-          if (catalog.value.error) errors.push(catalog.value.error);
-          const solved = new Set(cached.submissions.filter(submission => submission.verdict === 'OK').map(submission => getProblemKey(submission.problem.contestId, submission.problem.index)));
-          const day = new Date(now()).toLocaleDateString('en-CA');
-          recommendations = selectRecommendations(catalog.value.problems, profile.value.user.rating ?? 800, solved, `${handle.toLowerCase()}:${day}`);
-        }
+      
+      // We can generate recommendations even with partial history now!
+      const [profile, catalog] = await Promise.allSettled([getProfile(handle), getCatalog()]);
+      if (profile.status === 'rejected') errors.push(errorMessage(profile.reason));
+      if (catalog.status === 'rejected') errors.push(`Recommendations: ${errorMessage(catalog.reason)}`);
+      
+      if (profile.status === 'fulfilled' && catalog.status === 'fulfilled') {
+        if (profile.value.error) errors.push(profile.value.error);
+        if (catalog.value.error) errors.push(catalog.value.error);
+        
+        const solved = new Set(
+          cached.submissions
+            .filter(s => s.verdict === 'OK')
+            .map(s => getProblemKey(s.problem.contestId, s.problem.index))
+        );
+        
+        const enriched = enrichCatalog(catalog.value.problems, catalog.value.contests || []);
+        
+        recommendations = selectRecommendationsV2(
+          enriched,
+          {
+            solved,
+            attempted: new Map(),
+            participatedContests: new Set(),
+            tagActivity: new Map(),
+            recentRating: profile.value.user.rating ?? 800
+          },
+          preferences.dailyTarget
+        ) as RecommendedProblem[];
       }
       return {
         handle, submissions: cached.submissions, updatedAt: cached.updatedAt, coverage,
