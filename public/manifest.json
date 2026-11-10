@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "CFChart — Codeforces in-page charts & practice",
+  "name": "CFChart: Codeforces Charts & Practice",
   "version": "2.0.0",
-  "description": "Rating history, optional nonlinear practice scenarios, and daily progress directly on Codeforces pages.",
+  "description": "Enhanced in-page Codeforces rating charts, ML rating forecasts, daily practice streaks, and intelligent problem recommendations.",
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
