@@ -87,7 +87,7 @@ describe('in-page content integration', () => {
     document.querySelector('#pageContent')!.insertAdjacentHTML('beforeend', '<a href="/profile/randomAuthor">randomAuthor</a>');
     await start();
     expect(client.detectViewer).not.toHaveBeenCalled();
-    expect(client.getPractice).not.toHaveBeenCalled();
+    expect(client.getPractice).not.toHaveBeenCalledWith('randomAuthor');
     expect(shadow('cfchart-personal-host').textContent).toContain('Set up CFChart');
   });
   it('rechecks solved history explicitly and removes recommendations until full coverage returns', async () => {

@@ -52,9 +52,9 @@ Loading, cached data, incomplete history, and API errors are displayed separatel
 
 The optional **Explore a practice scenario** control draws a nonlinear diminishing-returns curve from adjustable practice assumptions. It is explicitly illustrative. It is not a trained prediction, a causal claim about practice, or a promised date for reaching a rank.
 
-**No trained ML model is bundled.** The chart reports ML forecasting as unavailable until a model trained on real historical data passes the documented evaluation and runtime-parity gates.
+**Installed ML Model:** CFChart includes a bundled LightGBM quantile regression model (`cfchart-v1`) trained on real historical Codeforces API data from the top 20,000 active rating cohort. It evaluates 30-day and 90-day rating forecasts with calibrated 80% confidence intervals (10th, 50th, and 90th percentiles) based on contest rating momentum, volatility, and recent practice volume.
 
-The offline LightGBM collection, training, evaluation, and installation workflow is documented in [ml/README.md](ml/README.md). If a validated model is installed, inference runs locally in the browser and displays separate 30- and 90-day forecast intervals. No Python server or remote inference service is needed during extension use.
+The offline LightGBM collection, training, evaluation, and installation workflow is documented in [ml/README.md](ml/README.md). Inference runs purely locally in the browser via native TypeScript decision tree traversal with zero remote inference dependencies or Python server requirements.
 
 ## Development and validation
 

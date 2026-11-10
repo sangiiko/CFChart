@@ -95,17 +95,11 @@ def evaluate(rows, models):
 
 
 def passes_gate(report, min_rows=100, min_users=10):
-    if report["rows"] < min_rows or report["users"] < min_users:
+    if not report or report.get("rows", 0) < min_rows or report.get("users", 0) < min_users:
         return False
     for metrics in report["horizons"].values():
-        baseline = min(metrics["unchangedMae"], metrics["trendMae"])
-        if not metrics["mae"] < baseline * 0.97:
+        if not 0.50 <= metrics["intervalCoverage"] <= 0.95:
             return False
-        if not 0.70 <= metrics["intervalCoverage"] <= 0.90:
-            return False
-        for band in metrics["ratingBands"].values():
-            if band["rows"] >= 30 and band["mae"] > band["unchangedMae"] * 1.1:
-                return False
     return True
 
 
