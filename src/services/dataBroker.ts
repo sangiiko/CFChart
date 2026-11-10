@@ -89,7 +89,18 @@ export function selectRecommendations(problems: CFProblem[], rating: number, sol
     const problem = eligible[0];
     if (problem?.contestId && problem.rating !== undefined) {
       selected.add(getProblemKey(problem.contestId, problem.index));
-      results.push({ ...problem, contestId: problem.contestId, rating: problem.rating, type, url: getProblemUrl(problem.contestId, problem.index) });
+      results.push({
+        ...problem,
+        contestId: problem.contestId,
+        rating: problem.rating,
+        type,
+        slot: type === 'warmup' ? 'warmup' : 'stretch',
+        slotLabel: type === 'warmup' ? 'Warmup' : 'Stretch',
+        pSolve: type === 'warmup' ? 0.8 : 0.4,
+        reasons: ['Legacy selection'],
+        qualityScore: 1,
+        url: getProblemUrl(problem.contestId, problem.index),
+      });
     }
   }
   return results;

@@ -1,4 +1,4 @@
-import type { CFProblem, CFContest } from '../types/codeforces';
+import type { CFProblem } from '../types/codeforces';
 
 export interface EnrichedProblem extends CFProblem {
   solvedCount: number;

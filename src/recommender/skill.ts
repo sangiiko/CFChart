@@ -1,7 +1,7 @@
-import { EnrichedProblem, SkillProfile } from './types';
-import { CFSubmission } from '../types/codeforces';
+import type { SkillProfile } from './types';
+import type { CFSubmission } from '../types/codeforces';
 
-export function estimateSkill(submissions: CFSubmission[], recentRating: number): SkillProfile {
+export function estimateSkill(_submissions: CFSubmission[], recentRating: number): SkillProfile {
   // Simple heuristic: blend rating with practice recent success
   // A proper Bayesian IRT would be better, but this is a solid start for v2
   const globalTheta = recentRating || 800;

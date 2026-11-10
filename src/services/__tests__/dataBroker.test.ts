@@ -15,6 +15,7 @@ function fixture() {
     fetchUserRatingHistory: vi.fn(async () => [{ contestId: 1, contestName: 'Round 1', handle: 'alice', rank: 1, ratingUpdateTimeSeconds: 1000, oldRating: 0, newRating: 1400 }]),
     fetchSubmissionPage: vi.fn(async (_handle: string, _from?: number, _count?: number): Promise<CFSubmission[]> => []),
     fetchProblemCatalog: vi.fn(async () => [{ contestId: 10, index: 'A', name: 'Warmup', rating: 1400, tags: [] }, { contestId: 10, index: 'B', name: 'Challenge', rating: 1600, tags: [] }]),
+    fetchContestList: vi.fn(async () => []),
   };
   const broker = createDataBroker({ api, storage, now: () => clock });
   const submission = (id: number): CFSubmission => ({ id, creationTimeSeconds: Math.floor(clock / 1000) - (3000 - id), verdict: 'OK', problem: { contestId: id, index: 'A', name: `Task ${id}`, tags: [] } });
@@ -83,7 +84,7 @@ describe('last-good snapshots', () => {
     const initial = await broker.getPractice('alice');
     advance(25 * 60 * 60 * 1000);
     api.fetchProblemCatalog.mockRejectedValue(new Error('Offline'));
-    if (api.fetchContestList) api.fetchContestList.mockResolvedValue([]);
+    api.fetchContestList.mockResolvedValue([]);
     const refreshed = await broker.getPractice('alice', { force: true });
     expect(refreshed.recommendations.map(problem => problem.url)).toEqual(initial.recommendations.map(problem => problem.url));
     expect(refreshed.error).toContain('cached problem catalog');

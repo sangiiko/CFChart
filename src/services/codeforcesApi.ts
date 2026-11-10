@@ -1,4 +1,4 @@
-import type { CFProblem, CFRankTier, CFRatingChange, CFSubmission, CFUser } from '../types/codeforces';
+import type { CFContest, CFProblem, CFRankTier, CFRatingChange, CFSubmission, CFUser } from '../types/codeforces';
 
 const API_BASE = 'https://codeforces.com/api';
 export const REQUEST_INTERVAL_MS = 2100;
@@ -105,7 +105,7 @@ export function createCodeforcesApi(options: ApiOptions = {}) {
     }
   }
 
-  function request<T>(method: string, params: Record<string, string | number> = {}): Promise<T> {
+  function request<T>(method: string, params: Record<string, string | number | boolean> = {}): Promise<T> {
     const url = `${API_BASE}/${method}?${new URLSearchParams(Object.entries(params).map(([key, value]) => [key, String(value)]))}`;
     const existing = inFlight.get(url);
     if (existing) return existing as Promise<T>;
