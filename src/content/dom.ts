@@ -26,7 +26,7 @@ export function headerAnchor(document: Document): Element | null {
 export function ratingGraph(document: Document): HTMLElement | null {
   const holder = document.querySelector<HTMLElement>('#userRatingGraphHolder, .userRatingGraphHolder');
   if (holder) return holder;
-  const placeholder = document.querySelector<HTMLElement>('#pageContent #placeholder');
+  const placeholder = document.getElementById('placeholder') || document.querySelector<HTMLElement>('#pageContent #placeholder, #placeholder');
   if (!placeholder) return null;
   const wrapper = placeholder.closest<HTMLElement>('.roundbox');
   if (wrapper && wrapper.id !== 'pageContent' && !wrapper.querySelector('.userbox, #userActivityGraph')) return wrapper;

@@ -29,7 +29,13 @@ export function startCFChart() {
   let native: ReturnType<typeof preserveNativeGraph> | null = null;
   let observedHandle: string | null = null, pending = 0;
   let viewerChecked = false;
-  const showNative = (visible: boolean) => native?.setVisible(visible);
+  const showNative = (visible: boolean) => {
+    if (!native) {
+      const graph = ratingGraph(document);
+      if (graph) native = preserveNativeGraph(graph);
+    }
+    native?.setVisible(visible);
+  };
   const removeProfile = () => { native?.restore(); native = null; profile?.root.unmount(); profile?.host.remove(); profile = null; observedHandle = null; };
   const savePreferences = async (changes: Partial<Preferences>) => {
     const saved = await updatePreferences(changes); if (disposed) return;
@@ -66,7 +72,7 @@ export function startCFChart() {
       if (fallback.classList.contains('userbox')) { if (fallback.nextElementSibling !== profile.host) fallback.after(profile.host); }
       else if (profile.host.parentElement !== fallback) fallback.prepend(profile.host);
     }
-    profile.root.render(<RenderBoundary key={handle} onFailure={() => showNative(true)}><ProfileHorizonCard handle={handle} preferences={preferences} nativeAvailable={!!graph} onPreferencesChange={savePreferences} onNativeVisibilityChange={native?.setVisible ?? showNative} /></RenderBoundary>);
+    profile.root.render(<RenderBoundary key={handle} onFailure={() => showNative(true)}><ProfileHorizonCard handle={handle} onNativeVisibilityChange={native?.setVisible ?? showNative} /></RenderBoundary>);
   };
   const schedule = () => { if (!pending && !disposed) pending = window.setTimeout(() => { pending = 0; render(); }, 80); };
   const observer = new MutationObserver(schedule);

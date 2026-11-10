@@ -44,16 +44,11 @@ describe('in-page content integration', () => {
     expect(shadow('cfchart-profile-host').querySelector('svg')).not.toBeNull();
     expect(shadow('cfchart-profile-host').textContent).toContain('3800');
   });
-  it('toggles the real native graph and restores it when the content script stops', async () => {
+  it('hides the native graph and restores it when the content script stops', async () => {
     await start(); expect(nativeGraph().style.display).toBe('none');
-    const buttons = shadow('cfchart-profile-host').querySelectorAll('button');
-    const original = Array.from(buttons).find(button => button.textContent === 'Original')!;
-    await act(async () => { original.click(); }); await flush();
-    expect(nativeGraph().style.display).toBe('block');
-    const enhanced = Array.from(shadow('cfchart-profile-host').querySelectorAll('button')).find(button => button.textContent === 'Enhanced')!;
-    await act(async () => { enhanced.click(); }); await flush(); expect(nativeGraph().style.display).toBe('none');
     await act(async () => { dispose?.(); });
-    expect(nativeGraph().style.display).toBe('block'); expect(document.querySelectorAll('[data-cfchart-host]')).toHaveLength(0);
+    expect(nativeGraph().style.display).toBe('block');
+    expect(document.querySelectorAll('[data-cfchart-host]')).toHaveLength(0);
   });
   it('keeps the original graph visible when the API cannot load the profile', async () => {
     client.getProfile.mockRejectedValue(new Error('Codeforces API is unavailable'));

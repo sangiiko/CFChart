@@ -4,7 +4,7 @@ CFChart is a Firefox extension that puts rating history and daily practice track
 
 ## What appears on Codeforces
 
-- **Profile chart:** an Enhanced / Original switch beside a light chart panel. Enhanced preserves every official rated-contest result, uses elapsed time on the horizontal axis, and includes an accessible contest-history table. Original reveals the existing Codeforces graph.
+- **Profile chart:** a clean, responsive rating chart panel directly on Codeforces user profiles. Preserves every official rated-contest result, uses elapsed time on the horizontal axis, displays local LightGBM machine learning rating forecasts, and includes an accessible contest-history table.
 - **Personal practice pill:** daily progress in the Codeforces header, with a flyout for your goal, streak, recent activity, solved problems, and practice suggestions.
 - **Isolated styles:** extension panels use Shadow DOM so their styles stay inside CFChart.
 - **Separate identities:** the profile you view controls its chart. Your configured account controls personal progress. Visiting another person's profile never changes your tracked account.
@@ -48,11 +48,9 @@ Profile data, submissions, and the problem catalog are cached locally. The visib
 
 Loading, cached data, incomplete history, and API errors are displayed separately. The original Codeforces chart remains available while Enhanced loads or cannot render. The extension does not invent a rating for an unrated user.
 
-## Practice scenarios and machine learning
+## Machine learning rating forecasts
 
-The optional **Explore a practice scenario** control draws a nonlinear diminishing-returns curve from adjustable practice assumptions. It is explicitly illustrative. It is not a trained prediction, a causal claim about practice, or a promised date for reaching a rank.
-
-**Installed ML Model:** CFChart includes a bundled LightGBM quantile regression model (`cfchart-v1`) trained on real historical Codeforces API data from the top 20,000 active rating cohort. It evaluates 30-day and 90-day rating forecasts with calibrated 80% confidence intervals (10th, 50th, and 90th percentiles) based on contest rating momentum, volatility, and recent practice volume.
+CFChart includes a bundled LightGBM quantile regression model (`cfchart-v1`) trained on real historical Codeforces API data from the top rated users (including the top 500 active rating cohort). It evaluates 30-day and 90-day rating forecasts with calibrated 80% confidence intervals (10th, 50th, and 90th percentiles) based on contest rating momentum, volatility, and recent practice volume.
 
 The offline LightGBM collection, training, evaluation, and installation workflow is documented in [ml/README.md](ml/README.md). Inference runs purely locally in the browser via native TypeScript decision tree traversal with zero remote inference dependencies or Python server requirements.
 
