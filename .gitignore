@@ -4,6 +4,7 @@ node_modules/
 # Production build output
 dist/
 dist-chrome/
+*.xpi
 
 # Local test/training outputs
 artifacts/
