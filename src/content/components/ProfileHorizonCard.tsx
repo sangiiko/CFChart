@@ -4,19 +4,21 @@ import { generateHorizonProjection } from '../../services/predictorModel';
 import { HorizonChart } from '../../components/HorizonChart';
 import { PracticeSimulator } from '../../components/PracticeSimulator';
 import { MilestoneGrid } from '../../components/MilestoneGrid';
-import { Sparkles, BarChart2 } from 'lucide-react';
+import { Sparkles, BarChart2, Loader2 } from 'lucide-react';
 
 interface ProfileHorizonCardProps {
   handle: string;
   currentRating: number;
   ratingHistory: CFRatingChange[];
   habitProgress?: HabitProgress;
+  isLoading?: boolean;
 }
 
 export const ProfileHorizonCard: React.FC<ProfileHorizonCardProps> = ({
   handle,
   currentRating,
   ratingHistory,
+  isLoading = false,
 }) => {
   const [activeTab, setActiveTab] = useState<'horizon' | 'original'>('horizon');
   const [params, setParams] = useState<PredictionParams>({
@@ -28,22 +30,25 @@ export const ProfileHorizonCard: React.FC<ProfileHorizonCardProps> = ({
   const horizon = generateHorizonProjection(ratingHistory, currentRating, params);
 
   return (
-    <div className="cfchart-profile-root my-4 bg-slate-950 border border-slate-800 rounded-2xl p-4 shadow-xl text-slate-100 font-sans">
+    <div className="cfchart-profile-root my-5 bg-slate-950 border border-slate-800 rounded-2xl p-5 shadow-2xl text-slate-100 font-sans transition-all">
       {/* Header with requested Toggle Switch: [CFChart Horizon] | [Original Chart] */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4 border-b border-slate-800 pb-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-sky-500/20 border border-sky-500/30 flex items-center justify-center text-sky-400">
-            <Sparkles className="w-4 h-4" />
+          <div className="w-9 h-9 rounded-xl bg-sky-500/20 border border-sky-500/30 flex items-center justify-center text-sky-400">
+            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-base text-slate-100 tracking-tight">CFChart Rating Horizon</h3>
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-sky-300 font-semibold border border-slate-700">
                 @{handle}
               </span>
+              {isLoading && (
+                <span className="text-[10px] text-amber-400 font-mono animate-pulse">Syncing...</span>
+              )}
             </div>
             <p className="text-xs text-slate-400">
-              Colored past contests &bull; <span className="text-slate-300 font-medium">Slate-grey future horizon</span>
+              Colored past contests &bull; <strong className="text-slate-300 font-medium">Slate-grey future horizon</strong>
             </p>
           </div>
         </div>
@@ -53,11 +58,6 @@ export const ProfileHorizonCard: React.FC<ProfileHorizonCardProps> = ({
           <button
             onClick={() => {
               setActiveTab('horizon');
-              // Ensure original CF chart is hidden when horizon is active
-              const orig = document.querySelector('#placeholder, .roundbox .datatable');
-              if (orig && (orig as HTMLElement).parentElement) {
-                // Keep CF original visible or toggled
-              }
             }}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-all ${
               activeTab === 'horizon'
@@ -87,7 +87,7 @@ export const ProfileHorizonCard: React.FC<ProfileHorizonCardProps> = ({
       {activeTab === 'horizon' ? (
         <div className="space-y-4">
           {/* Main Codeforces-styled Chart with colored past & grey future */}
-          <div className="bg-slate-900/60 rounded-xl p-3 border border-slate-800/80">
+          <div className="bg-slate-900/70 rounded-xl p-3 border border-slate-800/80">
             <HorizonChart
               data={horizon.chartData}
               currentRating={horizon.currentRating}

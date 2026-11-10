@@ -23,24 +23,42 @@
     "alarms"
   ],
   "host_permissions": [
+    "*://*.codeforces.com/*",
     "*://codeforces.com/*",
-    "https://codeforces.com/*"
+    "*://*.codeforces.net/*",
+    "*://codeforces.net/*",
+    "*://*.codeforces.org/*",
+    "*://codeforces.org/*"
   ],
   "background": {
     "scripts": ["background.js"]
   },
   "content_scripts": [
     {
-      "matches": ["*://codeforces.com/*", "https://codeforces.com/*"],
+      "matches": [
+        "*://*.codeforces.com/*",
+        "*://codeforces.com/*",
+        "*://*.codeforces.net/*",
+        "*://codeforces.net/*",
+        "*://*.codeforces.org/*",
+        "*://codeforces.org/*"
+      ],
       "js": ["content.js"],
       "css": ["content.css"],
-      "run_at": "document_idle"
+      "run_at": "document_end"
     }
   ],
   "web_accessible_resources": [
     {
       "resources": ["dashboard.html", "icons/*", "content.css"],
-      "matches": ["*://codeforces.com/*", "https://codeforces.com/*"]
+      "matches": [
+        "*://*.codeforces.com/*",
+        "*://codeforces.com/*",
+        "*://*.codeforces.net/*",
+        "*://codeforces.net/*",
+        "*://*.codeforces.org/*",
+        "*://codeforces.org/*"
+      ]
     }
   ],
   "browser_specific_settings": {

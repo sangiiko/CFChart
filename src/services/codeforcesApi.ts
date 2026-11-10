@@ -37,10 +37,23 @@ export function getProblemUrl(contestId?: number, index?: string): string {
   return `https://codeforces.com/problemset/problem/${contestId}/${index}`;
 }
 
+async function fetchWithTimeout(url: string, timeoutMs: number = 7000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    return res;
+  } catch (err) {
+    clearTimeout(timer);
+    throw err;
+  }
+}
+
 export const codeforcesApi = {
   async fetchUserInfo(handle: string): Promise<CFUser | null> {
     try {
-      const res = await fetch(`${API_BASE}/user.info?handles=${encodeURIComponent(handle)}`);
+      const res = await fetchWithTimeout(`${API_BASE}/user.info?handles=${encodeURIComponent(handle)}`);
       if (!res.ok) {
         throw new Error(`CF API returned ${res.status}`);
       }
@@ -50,14 +63,14 @@ export const codeforcesApi = {
       }
       return null;
     } catch (err) {
-      console.error('Failed to fetch CF user info:', err);
+      console.warn('Failed to fetch CF user info:', err);
       return null;
     }
   },
 
   async fetchUserRatingHistory(handle: string): Promise<CFRatingChange[]> {
     try {
-      const res = await fetch(`${API_BASE}/user.rating?handle=${encodeURIComponent(handle)}`);
+      const res = await fetchWithTimeout(`${API_BASE}/user.rating?handle=${encodeURIComponent(handle)}`);
       if (!res.ok) {
         throw new Error(`CF API returned ${res.status}`);
       }
@@ -67,14 +80,14 @@ export const codeforcesApi = {
       }
       return [];
     } catch (err) {
-      console.error('Failed to fetch rating history:', err);
+      console.warn('Failed to fetch rating history:', err);
       return [];
     }
   },
 
   async fetchUserSubmissions(handle: string, count: number = 200): Promise<CFSubmission[]> {
     try {
-      const res = await fetch(`${API_BASE}/user.status?handle=${encodeURIComponent(handle)}&from=1&count=${count}`);
+      const res = await fetchWithTimeout(`${API_BASE}/user.status?handle=${encodeURIComponent(handle)}&from=1&count=${count}`);
       if (!res.ok) {
         throw new Error(`CF API returned ${res.status}`);
       }
@@ -84,7 +97,7 @@ export const codeforcesApi = {
       }
       return [];
     } catch (err) {
-      console.error('Failed to fetch user submissions:', err);
+      console.warn('Failed to fetch user submissions:', err);
       return [];
     }
   },
@@ -93,14 +106,11 @@ export const codeforcesApi = {
     currentRating: number,
     solvedKeys: Set<string>
   ): Promise<RecommendedProblem[]> {
-    // Determine warmup and challenge target difficulties
     const baseRating = Math.max(800, currentRating || 1200);
-    // Round to nearest 100
     const roundedRating = Math.round(baseRating / 100) * 100;
     const warmupRating = Math.max(800, roundedRating);
     const challengeRating = roundedRating + 200;
 
-    // Curated high-quality classic CF problems fallback
     const classicProblems: RecommendedProblem[] = [
       { contestId: 158, index: 'A', name: 'Next Round', rating: 800, tags: ['implementation'], type: 'warmup', url: getProblemUrl(158, 'A') },
       { contestId: 71, index: 'A', name: 'Way Too Long Words', rating: 800, tags: ['strings'], type: 'warmup', url: getProblemUrl(71, 'A') },
@@ -162,16 +172,13 @@ export const codeforcesApi = {
       { contestId: 2033, index: 'E', name: 'Sakurako, Kosuke, and the Permutation', rating: 1500, tags: ['dfs and similar', 'graphs'], type: 'challenge', url: getProblemUrl(2033, 'E') },
     ];
 
-    // Filter out already solved problems
     const unsolved = classicProblems.filter(p => !solvedKeys.has(getProblemKey(p.contestId, p.index)));
 
-    // Find best matching warmup
     const warmups = unsolved
       .filter(p => Math.abs(p.rating - warmupRating) <= 200)
       .sort((a, b) => Math.abs(a.rating - warmupRating) - Math.abs(b.rating - warmupRating));
     const warmup = warmups[0] || unsolved[0] || classicProblems[0];
 
-    // Find best matching challenge
     const challenges = unsolved
       .filter(p => p !== warmup && Math.abs(p.rating - challengeRating) <= 200)
       .sort((a, b) => Math.abs(a.rating - challengeRating) - Math.abs(b.rating - challengeRating));

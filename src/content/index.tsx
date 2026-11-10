@@ -1,4 +1,4 @@
-import { createRoot } from 'react-dom/client';
+import { createRoot, Root } from 'react-dom/client';
 import browser from 'webextension-polyfill';
 import { storageService } from '../services/storage';
 import { codeforcesApi } from '../services/codeforcesApi';
@@ -7,65 +7,200 @@ import { TopBarHabitPill } from './components/TopBarHabitPill';
 import { ProfileHorizonCard } from './components/ProfileHorizonCard';
 import '../index.css';
 
-// Extract logged-in handle from Codeforces DOM
-function detectLoggedInHandle(): string | null {
-  // CF typically has header links: e.g. <a href="/profile/handle">handle</a>
-  const profileLinks = document.querySelectorAll<HTMLAnchorElement>('#header a[href^="/profile/"]');
-  for (const link of Array.from(profileLinks)) {
-    const text = link.textContent?.trim();
-    if (text && !text.includes('Enter') && !text.includes('Register')) {
-      return text;
-    }
+console.log('[CFChart] Content script loaded on:', window.location.href);
+
+let topBarRoot: Root | null = null;
+let profileRoot: Root | null = null;
+
+function detectHandleFromDOM(): string | null {
+  // 1. From URL pathname: e.g. /profile/Sangiiko
+  const urlMatch = window.location.pathname.match(/\/profile\/([a-zA-Z0-9_.-]+)/i);
+  if (urlMatch && urlMatch[1]) {
+    return urlMatch[1];
   }
 
-  // Check URL if on profile page: /profile/<handle>
-  const pathMatch = window.location.pathname.match(/\/profile\/([a-zA-Z0-9_.-]+)/);
-  if (pathMatch && pathMatch[1]) {
-    return pathMatch[1];
+  // 2. From page title: e.g. "Sangiiko - Codeforces"
+  const titleMatch = document.title.match(/^([a-zA-Z0-9_.-]+)\s*-\s*Codeforces/i);
+  if (titleMatch && titleMatch[1]) {
+    return titleMatch[1];
+  }
+
+  // 3. From header profile links
+  const links = document.querySelectorAll<HTMLAnchorElement>('a[href^="/profile/"]');
+  for (const link of Array.from(links)) {
+    const text = link.textContent?.trim();
+    if (text && !text.includes('Enter') && !text.includes('Register') && !text.includes('Logout')) {
+      return text;
+    }
   }
 
   return null;
 }
 
-// Extract handle of current profile page
-function getCurrentProfilePageHandle(): string | null {
-  const match = window.location.pathname.match(/\/profile\/([a-zA-Z0-9_.-]+)/);
-  return match ? match[1] : null;
+function detectRatingFromPage(): number {
+  // Try to find rating text in profile info box
+  // e.g. "Contest rating: 1199"
+  const text = document.body.innerText || '';
+  const match = text.match(/Contest rating:\s*(\d+)/i);
+  if (match && match[1]) {
+    const r = parseInt(match[1], 10);
+    if (!isNaN(r) && r > 0) return r;
+  }
+  return 1200;
 }
 
-async function initCFChart() {
+function mountTopBarPill(handle: string, progress: any, recommended: any[]) {
   try {
-    let handle = detectLoggedInHandle();
-    const storedHandle = await storageService.get('cf_handle');
+    let mount = document.getElementById('cfchart-topbar-root');
+    if (!mount) {
+      // Find header container
+      const target =
+        document.querySelector('.lang-chooser') ||
+        document.querySelector('#header .lang-chooser') ||
+        document.querySelector('#header') ||
+        document.querySelector('.main-menu-list') ||
+        document.body;
 
-    if (!handle && storedHandle) {
-      handle = storedHandle;
-    } else if (handle && handle !== storedHandle) {
-      await storageService.set('cf_handle', handle);
+      mount = document.createElement('div');
+      mount.id = 'cfchart-topbar-root';
+      mount.style.display = 'inline-block';
+      mount.style.marginLeft = '12px';
+      mount.style.verticalAlign = 'middle';
+      mount.style.position = 'relative';
+
+      if (target === document.body) {
+        mount.style.position = 'fixed';
+        mount.style.top = '10px';
+        mount.style.right = '15px';
+        mount.style.zIndex = '99999';
+        document.body.appendChild(mount);
+      } else {
+        target.prepend(mount);
+      }
+
+      topBarRoot = createRoot(mount);
     }
 
-    if (!handle) {
-      // Default to tourist as sample if unauthenticated/unconnected
-      handle = 'tourist';
+    if (topBarRoot) {
+      topBarRoot.render(
+        <TopBarHabitPill
+          progress={progress}
+          recommended={recommended}
+          handle={handle}
+          onOpenProfileHorizon={() => {
+            window.location.href = `/profile/${encodeURIComponent(handle)}`;
+          }}
+        />
+      );
+    }
+  } catch (err) {
+    console.warn('[CFChart] Error mounting TopBar pill:', err);
+  }
+}
+
+function mountProfileHorizon(
+  handle: string,
+  currentRating: number,
+  ratingHistory: any[],
+  habitProgress: any,
+  isLoading: boolean
+) {
+  try {
+    let mount = document.getElementById('cfchart-profile-mount');
+    if (!mount) {
+      // Look for Flot graph placeholder or wrappers
+      const placeholder = document.getElementById('placeholder');
+      const userRatingGraphHolder =
+        document.querySelector('.userRatingGraphHolder') ||
+        document.querySelector('#userRatingGraphHolder') ||
+        document.querySelector('.roundbox');
+      const pageContent =
+        document.getElementById('pageContent') ||
+        document.querySelector('.content') ||
+        document.querySelector('.main-content') ||
+        document.body;
+
+      mount = document.createElement('div');
+      mount.id = 'cfchart-profile-mount';
+
+      if (placeholder && placeholder.parentElement) {
+        placeholder.parentElement.insertBefore(mount, placeholder);
+        console.log('[CFChart] Mounted before #placeholder');
+      } else if (userRatingGraphHolder && userRatingGraphHolder.parentElement) {
+        userRatingGraphHolder.parentElement.insertBefore(mount, userRatingGraphHolder);
+        console.log('[CFChart] Mounted before userRatingGraphHolder');
+      } else if (pageContent) {
+        pageContent.prepend(mount);
+        console.log('[CFChart] Mounted into pageContent');
+      }
+
+      profileRoot = createRoot(mount);
     }
 
-    // Fetch user data
+    if (profileRoot) {
+      profileRoot.render(
+        <ProfileHorizonCard
+          handle={handle}
+          currentRating={currentRating}
+          ratingHistory={ratingHistory}
+          habitProgress={habitProgress}
+          isLoading={isLoading}
+        />
+      );
+    }
+  } catch (err) {
+    console.warn('[CFChart] Error mounting Profile Horizon card:', err);
+  }
+}
+
+async function runCFChart() {
+  const isProfilePage = window.location.pathname.toLowerCase().includes('/profile/');
+  const detectedHandle = detectHandleFromDOM() || 'tourist';
+  const initialRating = detectRatingFromPage();
+
+  console.log(`[CFChart] Active for @${detectedHandle} (Profile page: ${isProfilePage})`);
+
+  // Initial immediate placeholder progress so user sees UI instantly
+  const initialProgress = {
+    dailyTarget: 2,
+    todayCount: 0,
+    isTodayTargetMet: false,
+    todayProblems: [],
+    currentStreak: 0,
+    recentDays: [],
+    lastUpdated: Date.now(),
+  };
+
+  // 1. Mount TopBar Pill immediately
+  mountTopBarPill(detectedHandle, initialProgress, []);
+
+  // 2. If on profile page, mount Horizon Card immediately (with initial rating from page)
+  if (isProfilePage) {
+    mountProfileHorizon(detectedHandle, initialRating, [], initialProgress, true);
+  }
+
+  // 3. Asynchronously fetch latest data from Codeforces API
+  try {
     const [userInfo, ratingHistory, submissions] = await Promise.all([
-      codeforcesApi.fetchUserInfo(handle),
-      codeforcesApi.fetchUserRatingHistory(handle),
-      codeforcesApi.fetchUserSubmissions(handle, 150),
+      codeforcesApi.fetchUserInfo(detectedHandle),
+      codeforcesApi.fetchUserRatingHistory(detectedHandle),
+      codeforcesApi.fetchUserSubmissions(detectedHandle, 150),
     ]);
 
+    const activeRating = userInfo?.rating || initialRating || 1200;
     const habitProgress = calculateHabitProgress(submissions, 2);
-    const solvedKeys = new Set(submissions.filter(s => s.verdict === 'OK').map(s => `${s.problem.contestId}-${s.problem.index}`));
-    const recommended = await codeforcesApi.fetchRecommendedProblems(userInfo?.rating || 1200, solvedKeys);
+    const solvedKeys = new Set(
+      submissions.filter(s => s.verdict === 'OK').map(s => `${s.problem.contestId}-${s.problem.index}`)
+    );
+    const recommended = await codeforcesApi.fetchRecommendedProblems(activeRating, solvedKeys);
 
-    // Save to storage
+    // Cache locally
+    await storageService.set('cf_handle', detectedHandle);
     await storageService.set('cf_user', userInfo);
     await storageService.set('cf_ratings', ratingHistory);
     await storageService.set('cf_submissions', submissions);
 
-    // Update browser badge if runtime is available
+    // Update extension badge
     try {
       if (typeof browser !== 'undefined' && browser.runtime?.sendMessage) {
         browser.runtime.sendMessage({
@@ -75,98 +210,33 @@ async function initCFChart() {
         });
       }
     } catch {
-      // Ignore outside extension context
+      // Ignore
     }
 
-    // 1. Inject TopBar Habit Pill into Codeforces Header
-    injectTopBarPill(handle, habitProgress, recommended);
-
-    // 2. Inject Profile Horizon Card if on a profile page
-    const pageHandle = getCurrentProfilePageHandle() || handle;
-    if (window.location.pathname.includes('/profile/')) {
-      injectProfileHorizon(pageHandle, userInfo?.rating || 1200, ratingHistory, habitProgress);
+    // Update mounted UI with live data
+    mountTopBarPill(detectedHandle, habitProgress, recommended);
+    if (isProfilePage) {
+      mountProfileHorizon(detectedHandle, activeRating, ratingHistory, habitProgress, false);
     }
   } catch (err) {
-    console.error('CFChart injection error:', err);
+    console.warn('[CFChart] Error syncing live data, staying on initial render:', err);
+    if (isProfilePage) {
+      mountProfileHorizon(detectedHandle, initialRating, [], initialProgress, false);
+    }
   }
 }
 
-function injectTopBarPill(
-  handle: string,
-  progress: any,
-  recommended: any[]
-) {
-  const existing = document.getElementById('cfchart-topbar-root');
-  if (existing) existing.remove();
-
-  // Find suitable injection container in CF header
-  const headerContainer = document.querySelector('#header .lang-chooser') || document.querySelector('#header');
-  if (!headerContainer) return;
-
-  const mountDiv = document.createElement('div');
-  mountDiv.id = 'cfchart-topbar-root';
-  mountDiv.style.display = 'inline-block';
-  mountDiv.style.marginLeft = '12px';
-  mountDiv.style.verticalAlign = 'middle';
-
-  headerContainer.prepend(mountDiv);
-
-  const root = createRoot(mountDiv);
-  root.render(
-    <TopBarHabitPill
-      progress={progress}
-      recommended={recommended}
-      handle={handle}
-      onOpenProfileHorizon={() => {
-        window.location.href = `/profile/${encodeURIComponent(handle)}`;
-      }}
-    />
-  );
-}
-
-function injectProfileHorizon(
-  handle: string,
-  currentRating: number,
-  ratingHistory: any[],
-  habitProgress: any
-) {
-  const existing = document.getElementById('cfchart-profile-mount');
-  if (existing) existing.remove();
-
-  // Locate the rating graph in Codeforces profile page
-  // Codeforces has: <div id="pageContent"> ... or near #placeholder
-  const targetContainer =
-    document.querySelector('#placeholder')?.parentElement ||
-    document.querySelector('.roundbox .datatable')?.parentElement ||
-    document.querySelector('#pageContent');
-
-  if (!targetContainer) return;
-
-  const mountDiv = document.createElement('div');
-  mountDiv.id = 'cfchart-profile-mount';
-
-  // Insert before placeholder or at the top of content
-  const placeholder = document.getElementById('placeholder');
-  if (placeholder && placeholder.parentElement) {
-    placeholder.parentElement.insertBefore(mountDiv, placeholder);
-  } else {
-    targetContainer.prepend(mountDiv);
-  }
-
-  const root = createRoot(mountDiv);
-  root.render(
-    <ProfileHorizonCard
-      handle={handle}
-      currentRating={currentRating}
-      ratingHistory={ratingHistory}
-      habitProgress={habitProgress}
-    />
-  );
-}
-
-// Run when DOM is ready
+// Execute immediately when DOM is ready, or retry once if elements are still attaching
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => initCFChart());
+  document.addEventListener('DOMContentLoaded', () => runCFChart());
 } else {
-  initCFChart();
+  runCFChart();
 }
+
+// Fallback check after 500ms in case Codeforces delayed rendering #placeholder
+setTimeout(() => {
+  if (window.location.pathname.toLowerCase().includes('/profile/') && !document.getElementById('cfchart-profile-mount')) {
+    console.log('[CFChart] Retrying mount on delayed profile page');
+    runCFChart();
+  }
+}, 600);
