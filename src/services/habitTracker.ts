@@ -1,95 +1,60 @@
-import { CFSubmission, HabitProgress, SolvedProblemSummary, HabitDaySummary } from '../types/codeforces';
+import type { CFSubmission, HabitProgress, SolvedProblemSummary, HabitDaySummary } from '../types/codeforces';
+import type { HistoryCoverage } from '../types/app';
 import { getProblemKey, getProblemUrl } from './codeforcesApi';
 import { format, subDays } from 'date-fns';
 
+/** A day follows the browser's local timezone. Count distinct accepted tasks per day. */
 export function calculateHabitProgress(
   submissions: CFSubmission[],
-  dailyTarget: number = 2,
-  referenceDate: Date = new Date()
+  dailyTarget = 2,
+  referenceDate = new Date(),
+  coverage: HistoryCoverage = { complete: true, loaded: submissions.length },
 ): HabitProgress {
-  // Map of date string 'YYYY-MM-DD' -> Map of problemKey -> SolvedProblemSummary
+  dailyTarget = Number.isFinite(dailyTarget) ? Math.max(1, Math.floor(dailyTarget)) : 2;
   const solvedByDate = new Map<string, Map<string, SolvedProblemSummary>>();
-  const allSolvedKeys = new Set<string>();
+  const cutoffDate = coverage.earliestTime === undefined ? undefined : format(new Date(coverage.earliestTime * 1000), 'yyyy-MM-dd');
+  const isUnknownDay = (day: string) => !coverage.complete && (!cutoffDate || day <= cutoffDate);
 
-  // Filter only OK submissions
-  const acceptedSubmissions = submissions.filter(sub => sub.verdict === 'OK');
-
-  for (const sub of acceptedSubmissions) {
-    const subDate = new Date(sub.creationTimeSeconds * 1000);
-    const dateStr = format(subDate, 'yyyy-MM-dd');
-    const key = getProblemKey(sub.problem.contestId, sub.problem.index) || `${sub.problem.name}`;
-
-    allSolvedKeys.add(key);
-
-    if (!solvedByDate.has(dateStr)) {
-      solvedByDate.set(dateStr, new Map());
-    }
-
+  for (const sub of submissions) {
+    if (sub.verdict !== 'OK' || sub.creationTimeSeconds * 1000 > referenceDate.getTime()) continue;
+    const key = getProblemKey(sub.problem.contestId, sub.problem.index);
+    // Unidentified tasks cannot safely be deduplicated by their human-readable names.
+    if (!key) continue;
+    const dateStr = format(new Date(sub.creationTimeSeconds * 1000), 'yyyy-MM-dd');
+    if (!solvedByDate.has(dateStr)) solvedByDate.set(dateStr, new Map());
     const dayMap = solvedByDate.get(dateStr)!;
-    if (!dayMap.has(key)) {
+    const previous = dayMap.get(key);
+    if (!previous || previous.timestamp > sub.creationTimeSeconds * 1000) {
       dayMap.set(key, {
-        key,
-        name: sub.problem.name,
-        contestId: sub.problem.contestId,
-        index: sub.problem.index,
-        rating: sub.problem.rating,
-        timestamp: sub.creationTimeSeconds * 1000,
+        key, name: sub.problem.name, contestId: sub.problem.contestId, index: sub.problem.index,
+        rating: sub.problem.rating, timestamp: sub.creationTimeSeconds * 1000,
         url: getProblemUrl(sub.problem.contestId, sub.problem.index),
       });
     }
   }
 
-  // Today's summary
   const todayStr = format(referenceDate, 'yyyy-MM-dd');
-  const todayMap = solvedByDate.get(todayStr) || new Map<string, SolvedProblemSummary>();
-  const todayProblems = Array.from(todayMap.values());
+  const todayProblems = [...(solvedByDate.get(todayStr)?.values() ?? [])].sort((a, b) => b.timestamp - a.timestamp);
   const todayCount = todayProblems.length;
   const isTodayTargetMet = todayCount >= dailyTarget;
-
-  // Streak calculation
-  // Check consecutive days backwards
   let currentStreak = 0;
-  
-  // If today is met, streak starts with today (1 + check yesterday)
-  // If today is not met yet, streak is preserved from yesterday until end of today
-  const checkStartDate = isTodayTargetMet ? referenceDate : subDays(referenceDate, 1);
-  let dayCursor = checkStartDate;
-
-  while (true) {
-    const cursorStr = format(dayCursor, 'yyyy-MM-dd');
-    const daySolves = solvedByDate.get(cursorStr)?.size || 0;
-    
-    if (daySolves >= dailyTarget) {
-      currentStreak++;
-      dayCursor = subDays(dayCursor, 1);
-    } else {
-      break;
-    }
-
-    // Safety limit to avoid infinite loops
-    if (currentStreak > 365) break;
+  let cursor = isTodayTargetMet ? referenceDate : subDays(referenceDate, 1);
+  // Each successful iteration consumes one populated date, so this is naturally bounded.
+  while ((solvedByDate.get(format(cursor, 'yyyy-MM-dd'))?.size ?? 0) >= dailyTarget) {
+    currentStreak++;
+    cursor = subDays(cursor, 1);
   }
 
-  // Last 30 days activity summary
-  const recentDays: HabitDaySummary[] = [];
-  for (let i = 29; i >= 0; i--) {
-    const d = subDays(referenceDate, i);
-    const dStr = format(d, 'yyyy-MM-dd');
-    const count = solvedByDate.get(dStr)?.size || 0;
-    recentDays.push({
-      dateStr: dStr,
-      solvedCount: count,
-      targetMet: count >= dailyTarget,
-    });
-  }
+  const recentDays: HabitDaySummary[] = Array.from({ length: 30 }, (_, index) => {
+    const dateStr = format(subDays(referenceDate, 29 - index), 'yyyy-MM-dd');
+    const solvedCount = solvedByDate.get(dateStr)?.size ?? 0;
+    return { dateStr, solvedCount, targetMet: solvedCount >= dailyTarget, unknown: isUnknownDay(dateStr) };
+  });
 
   return {
-    dailyTarget,
-    todayCount,
-    isTodayTargetMet,
-    todayProblems,
-    currentStreak,
-    recentDays,
-    lastUpdated: Date.now(),
+    dailyTarget, todayCount, isTodayTargetMet, todayProblems, currentStreak, recentDays,
+    lastUpdated: referenceDate.getTime(), historyComplete: coverage.complete,
+    unknownBeforeDate: coverage.complete ? undefined : cutoffDate,
+    streakIsLowerBound: isUnknownDay(format(cursor, 'yyyy-MM-dd')),
   };
 }

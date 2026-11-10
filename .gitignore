@@ -4,6 +4,12 @@ node_modules/
 # Production build output
 dist/
 
+# Local test/training outputs
+artifacts/
+__pycache__/
+*.pyc
+ml/.venv/
+
 # Logs
 npm-debug.log*
 yarn-debug.log*

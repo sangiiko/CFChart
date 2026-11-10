@@ -1,39 +1,36 @@
-import { execSync } from 'child_process';
-import { copyFileSync, existsSync, mkdirSync, cpSync } from 'fs';
-import { resolve } from 'path';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { build as bundle } from 'esbuild';
+import { build as buildPages } from 'vite';
 
-console.log('🚀 Building CFChart Firefox Extension...');
-
-const run = (cmd) => {
-  console.log(`\n> ${cmd}`);
-  execSync(cmd, { stdio: 'inherit' });
+// Sources stay sources. Vite cleans dist/ and copies the one public manifest.
+execFileSync(resolve('node_modules/.bin/tsc'), ['--noEmit'], { stdio: 'inherit' });
+await buildPages();
+const common = {
+  bundle: true, minify: true, sourcemap: false,
+  target: ['firefox109'], format: 'iife', jsx: 'automatic',
+  define: { 'process.env.NODE_ENV': '"production"' }, legalComments: 'none',
 };
+await bundle({ ...common, entryPoints: ['src/content/index.tsx'], outfile: 'dist/content.js', loader: { '.css': 'text' } });
+await bundle({ ...common, entryPoints: ['src/background/index.ts'], outfile: 'dist/background.js' });
 
-// 1. Typecheck & Vite build for HTML pages
-run('tsc');
-run('vite build');
-
-// 2. Bundle standalone content.js and background.js into dist/
-run('npx esbuild src/content/index.tsx --bundle --minify --outfile=dist/content.js --define:process.env.NODE_ENV=\\"production\\"');
-run('npx esbuild src/background/index.ts --bundle --minify --outfile=dist/background.js --define:process.env.NODE_ENV=\\"production\\"');
-
-// 3. Compile content.css into dist/
-run('npx tailwindcss -i src/index.css -o dist/content.css --minify');
-
-// 4. Parity Sync: Copy compiled artifacts to repository root so loading EITHER root or dist/ works identically!
-console.log('\n📦 Synchronizing root directory for dual-manifest support...');
-copyFileSync('dist/content.js', 'content.js');
-copyFileSync('dist/background.js', 'background.js');
-copyFileSync('dist/content.css', 'content.css');
-copyFileSync('public/manifest.json', 'manifest.json');
-copyFileSync('dist/popup.html', 'popup.html');
-copyFileSync('dist/dashboard.html', 'dashboard.html');
-
-if (existsSync('dist/icons')) {
-  cpSync('dist/icons', 'icons', { recursive: true });
+const manifest = JSON.parse(readFileSync('dist/manifest.json', 'utf8'));
+const referenced = [
+  ...Object.values(manifest.icons), manifest.action.default_popup,
+  ...Object.values(manifest.action.default_icon), ...manifest.background.scripts,
+  ...manifest.content_scripts.flatMap(entry => [...entry.js, ...(entry.css ?? [])]),
+];
+for (const file of referenced) {
+  if (!existsSync(resolve('dist', file))) throw new Error(`Missing packaged resource: ${file}`);
 }
-if (existsSync('dist/assets')) {
-  cpSync('dist/assets', 'assets', { recursive: true });
+for (const page of readdirSync('dist').filter(file => file.endsWith('.html'))) {
+  const html = readFileSync(resolve('dist', page), 'utf8');
+  if (/\/src\//.test(html)) throw new Error(`Unbuilt source reference in ${page}`);
+  for (const [, asset] of html.matchAll(/(?:src|href)="([^"#]+)"/g)) {
+    if (!/^(?:https?:|data:)/.test(asset) && !existsSync(resolve('dist', asset.replace(/^\//, '')))) {
+      throw new Error(`Missing HTML resource in ${page}: ${asset}`);
+    }
+  }
 }
-
-console.log('\n✨ CFChart extension build complete! Both ./ and dist/ are valid extension directories.');
+console.log('\nCFChart is ready. Load dist/manifest.json in Firefox; reload the Codeforces tab after installation.');

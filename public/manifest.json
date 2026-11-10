@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "CFChart - Codeforces Daily Habit & Rating Horizon",
-  "version": "1.0.0",
-  "description": "Codeforces 2-problems-a-day habit tracker with in-page Codeforces overlay and grey-horizon rating predictor.",
+  "name": "CFChart — Codeforces in-page charts & practice",
+  "version": "2.0.0",
+  "description": "Rating history, optional nonlinear practice scenarios, and daily progress directly on Codeforces pages.",
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
@@ -20,6 +20,7 @@
   },
   "permissions": [
     "storage",
+    "unlimitedStorage",
     "alarms"
   ],
   "host_permissions": [
@@ -44,13 +45,12 @@
         "*://codeforces.org/*"
       ],
       "js": ["content.js"],
-      "css": ["content.css"],
       "run_at": "document_end"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["dashboard.html", "icons/*", "content.css"],
+      "resources": ["icons/*"],
       "matches": [
         "*://*.codeforces.com/*",
         "*://codeforces.com/*",

@@ -1,6 +1,7 @@
-import { CFUser, CFRatingChange, CFSubmission, RecommendedProblem, CFRankTier } from '../types/codeforces';
+import type { CFProblem, CFRankTier, CFRatingChange, CFSubmission, CFUser } from '../types/codeforces';
 
 const API_BASE = 'https://codeforces.com/api';
+export const REQUEST_INTERVAL_MS = 2100;
 
 export const RANK_TIERS = [
   { name: 'Newbie', color: '#808080', tier: 'newbie' as CFRankTier, min: 0, max: 1199 },
@@ -12,181 +13,159 @@ export const RANK_TIERS = [
   { name: 'International Master', color: '#ff8c00', tier: 'international_master' as CFRankTier, min: 2300, max: 2399 },
   { name: 'Grandmaster', color: '#ff0000', tier: 'grandmaster' as CFRankTier, min: 2400, max: 2599 },
   { name: 'International Grandmaster', color: '#ff0000', tier: 'international_grandmaster' as CFRankTier, min: 2600, max: 2999 },
-  { name: 'Legendary Grandmaster', color: '#ff0000', tier: 'legendary_grandmaster' as CFRankTier, min: 3000, max: 4000 },
+  { name: 'Legendary Grandmaster', color: '#ff0000', tier: 'legendary_grandmaster' as CFRankTier, min: 3000, max: 100000 },
 ];
 
 export function getRankTier(rating?: number) {
-  if (rating === undefined || rating === null) {
+  if (rating == null || !Number.isFinite(rating)) {
     return { name: 'Unrated', color: '#808080', tier: 'unrated' as CFRankTier, min: 0, max: 1199 };
   }
-  for (const tier of RANK_TIERS) {
-    if (rating >= tier.min && rating <= tier.max) {
-      return tier;
-    }
-  }
-  return RANK_TIERS[RANK_TIERS.length - 1];
+  return RANK_TIERS.find(tier => rating <= tier.max) ?? RANK_TIERS[RANK_TIERS.length - 1];
 }
 
 export function getProblemKey(contestId?: number, index?: string): string {
-  if (!contestId || !index) return '';
-  return `${contestId}-${index.toUpperCase()}`;
+  return contestId && index ? `${contestId}-${index.toUpperCase()}` : '';
 }
 
 export function getProblemUrl(contestId?: number, index?: string): string {
   if (!contestId || !index) return 'https://codeforces.com/problemset';
-  return `https://codeforces.com/problemset/problem/${contestId}/${index}`;
+  return contestId >= 100000
+    ? `https://codeforces.com/gym/${contestId}/problem/${encodeURIComponent(index)}`
+    : `https://codeforces.com/problemset/problem/${contestId}/${encodeURIComponent(index)}`;
 }
 
-async function fetchWithTimeout(url: string, timeoutMs: number = 7000): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, { signal: controller.signal });
-    clearTimeout(timer);
-    return res;
-  } catch (err) {
-    clearTimeout(timer);
-    throw err;
+export class CodeforcesApiError extends Error {
+  constructor(message: string, public readonly code: string, public readonly retryable = false) {
+    super(message);
+    this.name = 'CodeforcesApiError';
   }
 }
 
-export const codeforcesApi = {
-  async fetchUserInfo(handle: string): Promise<CFUser | null> {
-    try {
-      const res = await fetchWithTimeout(`${API_BASE}/user.info?handles=${encodeURIComponent(handle)}`);
-      if (!res.ok) {
-        throw new Error(`CF API returned ${res.status}`);
-      }
-      const data = await res.json();
-      if (data.status === 'OK' && data.result && data.result.length > 0) {
-        return data.result[0] as CFUser;
-      }
-      return null;
-    } catch (err) {
-      console.warn('Failed to fetch CF user info:', err);
-      return null;
-    }
-  },
-
-  async fetchUserRatingHistory(handle: string): Promise<CFRatingChange[]> {
-    try {
-      const res = await fetchWithTimeout(`${API_BASE}/user.rating?handle=${encodeURIComponent(handle)}`);
-      if (!res.ok) {
-        throw new Error(`CF API returned ${res.status}`);
-      }
-      const data = await res.json();
-      if (data.status === 'OK' && Array.isArray(data.result)) {
-        return data.result as CFRatingChange[];
-      }
-      return [];
-    } catch (err) {
-      console.warn('Failed to fetch rating history:', err);
-      return [];
-    }
-  },
-
-  async fetchUserSubmissions(handle: string, count: number = 200): Promise<CFSubmission[]> {
-    try {
-      const res = await fetchWithTimeout(`${API_BASE}/user.status?handle=${encodeURIComponent(handle)}&from=1&count=${count}`);
-      if (!res.ok) {
-        throw new Error(`CF API returned ${res.status}`);
-      }
-      const data = await res.json();
-      if (data.status === 'OK' && Array.isArray(data.result)) {
-        return data.result as CFSubmission[];
-      }
-      return [];
-    } catch (err) {
-      console.warn('Failed to fetch user submissions:', err);
-      return [];
-    }
-  },
-
-  async fetchRecommendedProblems(
-    currentRating: number,
-    solvedKeys: Set<string>
-  ): Promise<RecommendedProblem[]> {
-    const baseRating = Math.max(800, currentRating || 1200);
-    const roundedRating = Math.round(baseRating / 100) * 100;
-    const warmupRating = Math.max(800, roundedRating);
-    const challengeRating = roundedRating + 200;
-
-    const classicProblems: RecommendedProblem[] = [
-      { contestId: 158, index: 'A', name: 'Next Round', rating: 800, tags: ['implementation'], type: 'warmup', url: getProblemUrl(158, 'A') },
-      { contestId: 71, index: 'A', name: 'Way Too Long Words', rating: 800, tags: ['strings'], type: 'warmup', url: getProblemUrl(71, 'A') },
-      { contestId: 231, index: 'A', name: 'Team', rating: 800, tags: ['brute force'], type: 'warmup', url: getProblemUrl(231, 'A') },
-      { contestId: 282, index: 'A', name: 'Bit++', rating: 800, tags: ['implementation'], type: 'warmup', url: getProblemUrl(282, 'A') },
-      { contestId: 4, index: 'A', name: 'Watermelon', rating: 800, tags: ['math'], type: 'warmup', url: getProblemUrl(4, 'A') },
-      { contestId: 118, index: 'A', name: 'String Task', rating: 1000, tags: ['strings'], type: 'warmup', url: getProblemUrl(118, 'A') },
-      { contestId: 69, index: 'A', name: 'Young Physicist', rating: 1000, tags: ['math'], type: 'warmup', url: getProblemUrl(69, 'A') },
-      { contestId: 479, index: 'A', name: 'Expression', rating: 1000, tags: ['math', 'brute force'], type: 'warmup', url: getProblemUrl(479, 'A') },
-      { contestId: 136, index: 'A', name: 'Presents', rating: 800, tags: ['implementation'], type: 'warmup', url: getProblemUrl(136, 'A') },
-      { contestId: 160, index: 'A', name: 'Twins', rating: 900, tags: ['greedy'], type: 'warmup', url: getProblemUrl(160, 'A') },
-      { contestId: 96, index: 'A', name: 'Football', rating: 900, tags: ['strings'], type: 'warmup', url: getProblemUrl(96, 'A') },
-      { contestId: 339, index: 'A', name: 'Helpful Maths', rating: 800, tags: ['greedy', 'strings'], type: 'warmup', url: getProblemUrl(339, 'A') },
-      { contestId: 263, index: 'A', name: 'Beautiful Matrix', rating: 800, tags: ['implementation'], type: 'warmup', url: getProblemUrl(263, 'A') },
-      { contestId: 189, index: 'A', name: 'Cut Ribbon', rating: 1300, tags: ['dp'], type: 'warmup', url: getProblemUrl(189, 'A') },
-      { contestId: 455, index: 'A', name: 'Boredom', rating: 1500, tags: ['dp'], type: 'challenge', url: getProblemUrl(455, 'A') },
-      { contestId: 580, index: 'C', name: 'Kefa and Park', rating: 1500, tags: ['trees', 'dfs and similar'], type: 'challenge', url: getProblemUrl(580, 'C') },
-      { contestId: 1352, index: 'C', name: 'K-th Not Divisible by n', rating: 1200, tags: ['math', 'binary search'], type: 'warmup', url: getProblemUrl(1352, 'C') },
-      { contestId: 1335, index: 'C', name: 'Two Teams Composing', rating: 1100, tags: ['greedy', 'binary search'], type: 'warmup', url: getProblemUrl(1335, 'C') },
-      { contestId: 1328, index: 'B', name: 'K-th Beautiful String', rating: 1300, tags: ['binary search', 'math'], type: 'warmup', url: getProblemUrl(1328, 'B') },
-      { contestId: 1360, index: 'D', name: 'Buying Shovels', rating: 1300, tags: ['number theory', 'math'], type: 'warmup', url: getProblemUrl(1360, 'D') },
-      { contestId: 1360, index: 'E', name: 'Polygon', rating: 1300, tags: ['dp', 'greedy'], type: 'warmup', url: getProblemUrl(1360, 'E') },
-      { contestId: 1374, index: 'D', name: 'Zero Remainder Array', rating: 1400, tags: ['math', 'sortings'], type: 'challenge', url: getProblemUrl(1374, 'D') },
-      { contestId: 1363, index: 'B', name: 'Subsequence Hate', rating: 1400, tags: ['strings'], type: 'challenge', url: getProblemUrl(1363, 'B') },
-      { contestId: 1475, index: 'C', name: 'Ball in Berland', rating: 1400, tags: ['combinatorics', 'graphs'], type: 'challenge', url: getProblemUrl(1475, 'C') },
-      { contestId: 1352, index: 'D', name: 'Alice, Bob and Candies', rating: 1300, tags: ['implementation', 'two pointers'], type: 'warmup', url: getProblemUrl(1352, 'D') },
-      { contestId: 1343, index: 'C', name: 'Alternating Subsequence', rating: 1200, tags: ['dp', 'greedy', 'two pointers'], type: 'warmup', url: getProblemUrl(1343, 'C') },
-      { contestId: 1354, index: 'B', name: 'Ternary String', rating: 1200, tags: ['binary search', 'two pointers'], type: 'warmup', url: getProblemUrl(1354, 'B') },
-      { contestId: 1324, index: 'D', name: 'Pair of Topics', rating: 1400, tags: ['binary search', 'sortings'], type: 'challenge', url: getProblemUrl(1324, 'D') },
-      { contestId: 1370, index: 'C', name: 'Number Game', rating: 1400, tags: ['games', 'math', 'number theory'], type: 'challenge', url: getProblemUrl(1370, 'C') },
-      { contestId: 1385, index: 'D', name: 'a-Good String', rating: 1500, tags: ['bitmasks', 'divide and conquer', 'dp'], type: 'challenge', url: getProblemUrl(1385, 'D') },
-      { contestId: 1409, index: 'D', name: 'Decrease the Sum of Digits', rating: 1500, tags: ['greedy', 'math'], type: 'challenge', url: getProblemUrl(1409, 'D') },
-      { contestId: 1520, index: 'E', name: 'Arranging The Sheep', rating: 1400, tags: ['greedy', 'math'], type: 'challenge', url: getProblemUrl(1520, 'E') },
-      { contestId: 1551, index: 'B2', name: 'Wonderful Coloring - 2', rating: 1400, tags: ['binary search', 'greedy'], type: 'challenge', url: getProblemUrl(1551, 'B2') },
-      { contestId: 1526, index: 'B', name: 'I Hate 1111', rating: 1400, tags: ['dp', 'math', 'number theory'], type: 'challenge', url: getProblemUrl(1526, 'B') },
-      { contestId: 1538, index: 'C', name: 'Number of Pairs', rating: 1300, tags: ['binary search', 'two pointers'], type: 'warmup', url: getProblemUrl(1538, 'C') },
-      { contestId: 1618, index: 'D', name: 'Array and Operations', rating: 1300, tags: ['dp', 'greedy'], type: 'warmup', url: getProblemUrl(1618, 'D') },
-      { contestId: 1619, index: 'C', name: 'Wrong Addition', rating: 1200, tags: ['implementation'], type: 'warmup', url: getProblemUrl(1619, 'C') },
-      { contestId: 1669, index: 'F', name: 'Eating Candies', rating: 1100, tags: ['binary search', 'two pointers'], type: 'warmup', url: getProblemUrl(1669, 'F') },
-      { contestId: 1676, index: 'F', name: 'Longest Strike', rating: 1300, tags: ['data structures', 'greedy'], type: 'warmup', url: getProblemUrl(1676, 'F') },
-      { contestId: 1703, index: 'F', name: 'Yet Another Problem About Pairs Satisfying an Inequality', rating: 1300, tags: ['binary search', 'data structures'], type: 'warmup', url: getProblemUrl(1703, 'F') },
-      { contestId: 1742, index: 'E', name: 'Scuza', rating: 1200, tags: ['binary search', 'greedy'], type: 'warmup', url: getProblemUrl(1742, 'E') },
-      { contestId: 1791, index: 'G1', name: 'Teleporters (Easy Version)', rating: 1100, tags: ['greedy', 'sortings'], type: 'warmup', url: getProblemUrl(1791, 'G1') },
-      { contestId: 1807, index: 'G1', name: 'Subsequence Addition (Easy Version)', rating: 1100, tags: ['dp', 'greedy'], type: 'warmup', url: getProblemUrl(1807, 'G1') },
-      { contestId: 1829, index: 'F', name: 'Forever Winter', rating: 1200, tags: ['dfs and similar', 'graphs'], type: 'warmup', url: getProblemUrl(1829, 'F') },
-      { contestId: 1850, index: 'F', name: 'We Were Both Children', rating: 1300, tags: ['math', 'number theory'], type: 'warmup', url: getProblemUrl(1850, 'F') },
-      { contestId: 1873, index: 'F', name: 'Money Trees', rating: 1300, tags: ['binary search', 'two pointers'], type: 'warmup', url: getProblemUrl(1873, 'F') },
-      { contestId: 1915, index: 'E', name: 'Romantic Glasses', rating: 1300, tags: ['data structures', 'math'], type: 'warmup', url: getProblemUrl(1915, 'E') },
-      { contestId: 1927, index: 'D', name: 'Find the Different Ones!', rating: 1300, tags: ['binary search', 'data structures'], type: 'warmup', url: getProblemUrl(1927, 'D') },
-      { contestId: 1941, index: 'D', name: 'Rudolf and the Ball Game', rating: 1300, tags: ['dp'], type: 'warmup', url: getProblemUrl(1941, 'D') },
-      { contestId: 1950, index: 'E', name: 'Nearly Shortest Repeating Substring', rating: 1500, tags: ['brute force', 'strings'], type: 'challenge', url: getProblemUrl(1950, 'E') },
-      { contestId: 1971, index: 'E', name: 'Find the Car', rating: 1300, tags: ['binary search', 'math'], type: 'warmup', url: getProblemUrl(1971, 'E') },
-      { contestId: 1985, index: 'F', name: 'Final Boss', rating: 1500, tags: ['binary search', 'data structures'], type: 'challenge', url: getProblemUrl(1985, 'F') },
-      { contestId: 1999, index: 'E', name: 'Triple Operations', rating: 1300, tags: ['dp', 'greedy', 'math'], type: 'warmup', url: getProblemUrl(1999, 'E') },
-      { contestId: 2000, index: 'E', name: 'Photoshoot for Gorillas', rating: 1400, tags: ['greedy', 'math', 'sortings'], type: 'challenge', url: getProblemUrl(2000, 'E') },
-      { contestId: 2008, index: 'E', name: 'Alternating String', rating: 1500, tags: ['brute force', 'strings'], type: 'challenge', url: getProblemUrl(2008, 'E') },
-      { contestId: 2014, index: 'D', name: 'Robert Hood and Mrs Hood', rating: 1500, tags: ['binary search', 'data structures'], type: 'challenge', url: getProblemUrl(2014, 'D') },
-      { contestId: 2026, index: 'C', name: 'Action Figures', rating: 1600, tags: ['binary search', 'greedy'], type: 'challenge', url: getProblemUrl(2026, 'C') },
-      { contestId: 2033, index: 'E', name: 'Sakurako, Kosuke, and the Permutation', rating: 1500, tags: ['dfs and similar', 'graphs'], type: 'challenge', url: getProblemUrl(2033, 'E') },
-    ];
-
-    const unsolved = classicProblems.filter(p => !solvedKeys.has(getProblemKey(p.contestId, p.index)));
-
-    const warmups = unsolved
-      .filter(p => Math.abs(p.rating - warmupRating) <= 200)
-      .sort((a, b) => Math.abs(a.rating - warmupRating) - Math.abs(b.rating - warmupRating));
-    const warmup = warmups[0] || unsolved[0] || classicProblems[0];
-
-    const challenges = unsolved
-      .filter(p => p !== warmup && Math.abs(p.rating - challengeRating) <= 200)
-      .sort((a, b) => Math.abs(a.rating - challengeRating) - Math.abs(b.rating - challengeRating));
-    const challenge = challenges[0] || unsolved.find(p => p !== warmup) || classicProblems[classicProblems.length - 1];
-
-    return [
-      { ...warmup, type: 'warmup' },
-      { ...challenge, type: 'challenge' }
-    ];
+export function normalizeHandle(handle: string): string {
+  if (typeof handle !== 'string' || !/^[a-zA-Z0-9_.-]{1,64}$/.test(handle.trim())) {
+    throw new CodeforcesApiError('Enter a valid Codeforces handle.', 'invalid_handle');
   }
-};
+  return handle.trim();
+}
+
+interface ApiOptions {
+  fetch?: typeof fetch;
+  now?: () => number;
+  wait?: (milliseconds: number) => Promise<void>;
+}
+
+/** Instantiate once, in the background, so every tab shares one request queue. */
+export function createCodeforcesApi(options: ApiOptions = {}) {
+  const fetchFn = options.fetch ?? globalThis.fetch.bind(globalThis);
+  const now = options.now ?? Date.now;
+  const wait = options.wait ?? ((ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)));
+  // An MV3 event background can restart immediately after another instance sent a
+  // request. A startup cooldown preserves spacing across those lifecycles too.
+  let lastStartedAt = now();
+  let queue: Promise<void> = Promise.resolve();
+  const inFlight = new Map<string, Promise<unknown>>();
+
+  function enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const result = queue.then(async () => {
+      const delay = Math.max(0, REQUEST_INTERVAL_MS - (now() - lastStartedAt));
+      if (delay) await wait(delay);
+      lastStartedAt = now();
+      return operation();
+    });
+    queue = result.then(() => {}, () => {});
+    return result;
+  }
+
+  async function fetchOnce<T>(url: string): Promise<T> {
+    const controller = new AbortController();
+    // Include reading the response body in the timeout.
+    const timer = setTimeout(() => controller.abort(), 20000);
+    try {
+      const response = await fetchFn(url, { signal: controller.signal, credentials: 'omit' });
+      if (!response.ok) {
+        throw new CodeforcesApiError(`Codeforces returned HTTP ${response.status}. Try again shortly.`, 'http_error', response.status === 429 || response.status >= 500);
+      }
+      let data: { status?: string; result?: T; comment?: string };
+      try {
+        data = await response.json() as typeof data;
+      } catch {
+        throw new CodeforcesApiError('Codeforces returned an unreadable response. Try again shortly.', 'invalid_response');
+      }
+      if (data.status !== 'OK' || data.result === undefined) {
+        const limited = /limit|too many/i.test(data.comment ?? '');
+        throw new CodeforcesApiError(data.comment || 'Codeforces could not complete the request.', limited ? 'rate_limited' : 'api_error', limited);
+      }
+      return data.result;
+    } catch (error) {
+      if (error instanceof CodeforcesApiError) throw error;
+      if (controller.signal.aborted) throw new CodeforcesApiError('Codeforces took too long to respond. Try again.', 'timeout', true);
+      throw new CodeforcesApiError('Could not connect to Codeforces. Check your connection and retry.', 'network_error', true);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  function request<T>(method: string, params: Record<string, string | number> = {}): Promise<T> {
+    const url = `${API_BASE}/${method}?${new URLSearchParams(Object.entries(params).map(([key, value]) => [key, String(value)]))}`;
+    const existing = inFlight.get(url);
+    if (existing) return existing as Promise<T>;
+    const operation = (async () => {
+      for (let attempt = 0; ; attempt++) {
+        try {
+          return await enqueue(() => fetchOnce<T>(url));
+        } catch (error) {
+          if (!(error instanceof CodeforcesApiError) || !error.retryable || attempt >= 2) throw error;
+          await wait(REQUEST_INTERVAL_MS * (attempt + 1));
+        }
+      }
+    })();
+    inFlight.set(url, operation);
+    void operation.finally(() => inFlight.delete(url)).catch(() => {});
+    return operation;
+  }
+
+  return {
+    async fetchUserInfo(handle: string): Promise<CFUser> {
+      const users = await request<CFUser[]>('user.info', { handles: normalizeHandle(handle) });
+      const user = Array.isArray(users) ? users[0] : undefined;
+      if (!user?.handle) throw new CodeforcesApiError('Codeforces did not return this profile.', 'invalid_response');
+      return user;
+    },
+    async fetchUserRatingHistory(handle: string): Promise<CFRatingChange[]> {
+      const history = await request<CFRatingChange[]>('user.rating', { handle: normalizeHandle(handle) });
+      if (!Array.isArray(history) || history.some(item => !Number.isFinite(item.ratingUpdateTimeSeconds) || !Number.isFinite(item.newRating))) {
+        throw new CodeforcesApiError('Codeforces returned invalid rating history.', 'invalid_response');
+      }
+      return history;
+    },
+    async fetchSubmissionPage(handle: string, from = 1, count = 1000): Promise<CFSubmission[]> {
+      const submissions = await request<CFSubmission[]>('user.status', { handle: normalizeHandle(handle), from, count });
+      if (!Array.isArray(submissions) || submissions.some(item => !Number.isFinite(item.id) || !Number.isFinite(item.creationTimeSeconds) || !item.problem?.name)) {
+        throw new CodeforcesApiError('Codeforces returned invalid submission history.', 'invalid_response');
+      }
+      return submissions.map(submission => ({
+        id: submission.id,
+        creationTimeSeconds: submission.creationTimeSeconds,
+        verdict: submission.verdict,
+        problem: {
+          contestId: submission.problem.contestId,
+          index: submission.problem.index,
+          name: submission.problem.name,
+          rating: submission.problem.rating,
+          tags: submission.problem.tags ?? [],
+        },
+        author: submission.author ? {
+          participantType: submission.author.participantType,
+          members: submission.author.members?.map(member => ({ handle: member.handle })),
+        } : undefined,
+      }));
+    },
+    async fetchProblemCatalog(): Promise<CFProblem[]> {
+      const result = await request<{ problems: CFProblem[] }>('problemset.problems');
+      if (!Array.isArray(result.problems)) throw new CodeforcesApiError('Codeforces returned an invalid problem catalog.', 'invalid_response');
+      return result.problems.filter(problem => problem.contestId && problem.index && Number.isFinite(problem.rating) && Array.isArray(problem.tags));
+    },
+  };
+}
+
+export const codeforcesApi = createCodeforcesApi();

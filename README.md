@@ -1,110 +1,89 @@
-# CFChart 🎯 (Firefox WebExtension)
+# CFChart 2.0
 
-**CFChart** is a browser extension for competitive programmers on **Codeforces** designed around a single, powerful daily habit: **Solve 2 problems a day consistently**.
+CFChart is a Firefox extension that puts rating history and daily practice tracking directly on Codeforces pages.
 
-It draws directly over Codeforces to track your daily progress and visualizes your rating future using an authentic **Codeforces-style Rating Horizon Predictor**: past contests are rendered in their vibrant earned rank colors, while the future projection extends out as an elegant **dashed slate-grey ghost trajectory** that you turn into colorful reality through daily practice.
+## What appears on Codeforces
 
----
+- **Profile chart:** an Enhanced / Original switch beside a light chart panel. Enhanced preserves every official rated-contest result, uses elapsed time on the horizontal axis, and includes an accessible contest-history table. Original reveals the existing Codeforces graph.
+- **Personal practice pill:** daily progress in the Codeforces header, with a flyout for your goal, streak, recent activity, solved problems, and practice suggestions.
+- **Isolated styles:** extension panels use Shadow DOM so their styles stay inside CFChart.
+- **Separate identities:** the profile you view controls its chart. Your configured account controls personal progress. Visiting another person's profile never changes your tracked account.
 
-## 🌟 Key Features
+CFChart can adopt your signed-in account from a verified header profile/logout link when no personal account is configured. Signed-out users can choose a handle in the header flyout or extension popup. No password or Codeforces API key is required.
 
-1. **In-Page Codeforces Integration (`codeforces.com`)**:
-   - **Top-Bar Habit Pill**: Seamlessly injected into the Codeforces navigation bar (`🔥 Streak | Today: 1/2 🎯`).
-   - **Profile Horizon Card**: Injected right above the Codeforces profile graph (`/profile/<handle>`) with a toggle switch: `[✨ CFChart Horizon] | [Original Codeforces Graph]`.
-   - **Auto-Detection**: Automatically detects your logged-in Codeforces username so no manual login setup is needed.
+The toolbar popup manages your account and daily goal. The full-page extension view uses the same practice/settings panel; rating charts live on Codeforces profiles.
 
-2. **The "Grey Ghost" Rating Horizon Predictor**:
-   - **Authentic Codeforces Aesthetics**: Includes official background tier bands (Newbie gray, Pupil green, Specialist cyan, Expert blue, Candidate Master purple, Master orange, Grandmaster red).
-   - **Visual Contrast**: Earned past contest ratings are vibrantly colored; future projections are rendered in **dashed slate-grey (`#64748b`)** with a translucent grey confidence envelope.
-   - **Practice Horizon Simulator**: Interactive sliders allow you to test what-if scenarios (e.g. 2 vs 3 problems/day, +150 difficulty offset, 3/6/12 months timeframe) and see your projected rating and milestone dates adjust in real time.
-   - **Milestone Target Cards**: Exact estimated calendar dates and problems remaining to cross into Specialist (1400), Expert (1600), Candidate Master (1900), etc.
+## Build and install in Firefox
 
-3. **Daily "2 Problems a Day" Habit Engine**:
-   - Live query of accepted submissions (`verdict === 'OK'`) for today.
-   - Circular SVG progress ring (`0/2`, `1/2`, `2/2`).
-   - Active daily streak counter with flame indicator.
-   - 30-day consistency heatmap.
-   - Daily Workout: 2 curated unsolved problems (1 warmup/consolidation + 1 growth challenge) ready to solve in 1 click.
+Use a current Node.js release supported by the dependencies, then run:
 
-4. **Toolbar Ambient Badge & Extension Popup**:
-   - Firefox toolbar badge displays your live status (`0/2`, `1/2`, or `✓`).
-   - Compact popup view (`popup.html`) when browsing any other website.
-   - Dedicated full-screen horizon dashboard (`dashboard.html`).
-
----
-
-## 🚀 How to Install & Run in Firefox
-
-### 1. Build the Extension
 ```bash
-npm install
+npm ci
 npm run build
 ```
-The compiled, ready-to-load extension will be located in the `dist/` directory.
 
-### 2. Load into Firefox
-1. Open Firefox and navigate to `about:debugging` in the address bar.
-2. In the left sidebar, click **This Firefox**.
-3. Under **Temporary Extensions**, click **Load Temporary Add-on...**.
-4. Browse to your `CFChart/dist/` directory and select `manifest.json`.
-5. CFChart is now installed! You will see the CFChart icon on your Firefox toolbar.
+1. Open `about:debugging#/runtime/this-firefox` in Firefox.
+2. Choose **Load Temporary Add-on…**.
+3. Select **`dist/manifest.json`** from this project.
+4. Open Codeforces and visit a profile.
+5. **Reload any Codeforces tabs that were already open.**
 
-### 3. Try It on Codeforces
-- Navigate to `https://codeforces.com/`.
-- Look at the top navigation bar to see your daily habit badge: `🔥 0d | Today: 0/2 🎯`.
-- Visit any profile (e.g., `https://codeforces.com/profile/tourist` or your own handle) to experience the **CFChart Rating Horizon** chart with interactive simulation sliders!
+After changing the code, rebuild, reload the add-on in `about:debugging`, and reload the Codeforces tab. Temporary add-ons must be loaded again after restarting Firefox.
 
----
+`dist/` is the extension package. Source HTML stays in the repository root; builds never replace source files with generated output. Load the manifest inside `dist/`.
 
-## 🛠️ Development & Testing
+## Daily progress and history coverage
+
+The default goal is two **distinct accepted problems per local calendar day**. Repeated accepted submissions for the same problem count once that day. Solving the same problem on a later day can count for that later day. Failed submissions do not count.
+
+A streak tracks consecutive local days that meet the configured goal. Changing the goal recalculates progress using that goal. CFChart marks incomplete days as unknown instead of treating missing history as inactivity. A `+` indicates a lower bound when available history cannot establish an exact total or streak.
+
+Initial sync fetches recent submissions. For a larger account, use **Continue history sync** in the popup or **Sync more history** in the header flyout to load another older page. CFChart does not silently download an account's entire history. Practice recommendations appear only after the full solved history is available, so known solved problems can be excluded reliably.
+
+## Data loading and refresh
+
+Codeforces requests go through one background queue, with request starts spaced at least 2.1 seconds apart. The queue, retries, and a first-time problem-catalog download can make initial setup take several seconds. Official profile history loads independently of personal recommendations.
+
+Profile data, submissions, and the problem catalog are cached locally. The visible in-page tracker checks for updates every minute and refreshes when you return to the tab. A background alarm refreshes personal progress periodically. **Refresh** requests new data explicitly.
+
+Loading, cached data, incomplete history, and API errors are displayed separately. The original Codeforces chart remains available while Enhanced loads or cannot render. The extension does not invent a rating for an unrated user.
+
+## Practice scenarios and machine learning
+
+The optional **Explore a practice scenario** control draws a nonlinear diminishing-returns curve from adjustable practice assumptions. It is explicitly illustrative. It is not a trained prediction, a causal claim about practice, or a promised date for reaching a rank.
+
+**No trained ML model is bundled.** The chart reports ML forecasting as unavailable until a model trained on real historical data passes the documented evaluation and runtime-parity gates.
+
+The offline LightGBM collection, training, evaluation, and installation workflow is documented in [ml/README.md](ml/README.md). If a validated model is installed, inference runs locally in the browser and displays separate 30- and 90-day forecast intervals. No Python server or remote inference service is needed during extension use.
+
+## Development and validation
 
 ```bash
-# Run unit tests (habit tracking, prediction models)
 npm test
-
-# Run Vite development server
+npm run build
 npm run dev
 ```
 
----
+The Vite development server helps inspect extension-page layouts. A standalone web preview cannot connect to the extension's background process; it displays a connection error until loaded as an actual add-on. Verify in-page injection using a built extension and a Codeforces tab.
 
-## 📂 Project Structure
+Validation has distinct scopes:
 
-```
-CFChart/
-├── manifest.json              # Public manifest source template
-├── public/
-│   ├── manifest.json          # Firefox WebExtension MV3 manifest
-│   └── icons/                 # Extension icons (16, 32, 48, 128px)
-├── src/
-│   ├── types/
-│   │   └── codeforces.ts      # TypeScript interfaces
-│   ├── services/
-│   │   ├── codeforcesApi.ts   # Public API calls with caching & rate limiting
-│   │   ├── habitTracker.ts    # 2-problem habit engine, streaks, & heatmaps
-│   │   ├── predictorModel.ts  # Science-backed rating projection & milestone dates
-│   │   └── storage.ts         # Firefox storage abstraction with localStorage fallback
-│   ├── components/
-│   │   ├── HorizonChart.tsx   # Recharts Codeforces-styled chart (colored past, grey future)
-│   │   ├── PracticeSimulator.tsx # Interactive simulation sliders
-│   │   ├── MilestoneGrid.tsx  # Next rank milestone checkpoint cards
-│   │   ├── DailyHabitRing.tsx # Radial progress for 0/2, 1/2, 2/2
-│   │   ├── RecommendedCard.tsx# Daily workout problem cards
-│   │   └── HandleConnectModal.tsx # Profile switcher dialog
-│   ├── content/
-│   │   ├── index.tsx          # Codeforces in-page content script injector
-│   │   └── components/
-│   │       ├── TopBarHabitPill.tsx    # Header navbar habit widget
-│   │       └── ProfileHorizonCard.tsx # In-page profile horizon card & toggle
-│   ├── background/
-│   │   └── index.ts           # Periodic alarms & toolbar badge updater
-│   ├── popup/
-│   │   ├── PopupApp.tsx       # Toolbar popup application
-│   │   └── main.tsx
-│   └── dashboard/
-│       ├── DashboardApp.tsx   # Full tab dashboard application
-│       └── main.tsx
-├── dist/                      # Final packaged Firefox WebExtension
-└── scripts/
-    └── build.js               # Multi-stage build script
+- **Unit and jsdom integration tests** cover API queue/cache behavior, history coverage, identity separation, native-chart restoration, delayed mounts, reinjection, unrated accounts, scenarios, and ML adapter behavior.
+- **Packaged Firefox smoke checks** exercise the built extension using representative Codeforces page fixtures and public API rating data. Fixtures are not a captured live-page compatibility guarantee.
+- **Live-site limitation:** the public profile page presented a Cloudflare challenge in the verification environment. Direct rendering on the current live Codeforces profile DOM could not be fully verified there. A local check after installation is still needed.
+
+The optional Python ML tests exercise training/export mechanics with explicitly synthetic fixtures. They do not establish real forecast accuracy or produce a deployable trained model.
+
+## Source layout
+
+```text
+src/content/       In-page controller, page adapters, isolated styles, panels
+src/components/    Rating chart and scenario controls
+src/app/           Shared popup/full-page practice settings
+src/background/    Extension messages, refresh alarms, toolbar badge
+src/services/      API queue, cache broker, account settings, habit calculations
+src/ml/            Local model features, inference, and model registry
+ml/                Offline collection, training, evaluation, and documentation
+public/            Manifest and extension icons
+scripts/build.js   Clean, validated dist/ packaging
 ```

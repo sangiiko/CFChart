@@ -50,6 +50,10 @@ export interface CFSubmission {
   programmingLanguage?: string;
   verdict?: string;
   passedTestCount?: number;
+  author?: {
+    participantType?: string;
+    members?: { handle: string }[];
+  };
 }
 
 export interface SolvedProblemSummary {
@@ -66,6 +70,7 @@ export interface HabitDaySummary {
   dateStr: string; // YYYY-MM-DD
   solvedCount: number;
   targetMet: boolean;
+  unknown?: boolean;
 }
 
 export interface HabitProgress {
@@ -76,6 +81,9 @@ export interface HabitProgress {
   currentStreak: number;
   recentDays: HabitDaySummary[];
   lastUpdated: number;
+  historyComplete?: boolean;
+  unknownBeforeDate?: string;
+  streakIsLowerBound?: boolean;
 }
 
 export interface PredictionParams {

@@ -1,42 +1,33 @@
 import { describe, it, expect } from 'vitest';
-import { generateHorizonProjection } from '../predictorModel';
+import { generateHorizonProjection, historicalChartPoints } from '../predictorModel';
 import { CFRatingChange } from '../../types/codeforces';
-
-describe('predictorModel', () => {
-  it('generates consistent projection starting from current rating', () => {
-    const today = new Date('2026-11-10T12:00:00Z');
-    const history: CFRatingChange[] = [
-      { contestId: 1, contestName: 'Round #1', handle: 'test', rank: 500, ratingUpdateTimeSeconds: 1700000000, oldRating: 0, newRating: 1250 },
-      { contestId: 2, contestName: 'Round #2', handle: 'test', rank: 300, ratingUpdateTimeSeconds: 1705000000, oldRating: 1250, newRating: 1380 },
-    ];
-
-    const result = generateHorizonProjection(
-      history,
-      1380,
-      { dailyProblems: 2, difficultyOffset: 150, horizonMonths: 6 },
-      today
-    );
-
-    expect(result.currentRating).toBe(1380);
-    expect(result.chartData.length).toBeGreaterThan(5);
+const today = new Date('2026-11-10T12:00:00Z');
+const history: CFRatingChange[] = [
+  { contestId: 1, contestName: 'Round #1', handle: 'test', rank: 500, ratingUpdateTimeSeconds: 1700000000, oldRating: 0, newRating: 1250 },
+  { contestId: 2, contestName: 'Round #2', handle: 'test', rank: 300, ratingUpdateTimeSeconds: 1705000000, oldRating: 1250, newRating: 1380 },
+];
+describe('illustrative practice scenario', () => {
+  it('keeps every real contest and anchors the separate scenario today', () => {
+    const result = generateHorizonProjection(history, 1380, { dailyProblems: 2, difficultyOffset: 150, horizonMonths: 6 }, today);
+    const past = result.chartData.filter(point => !point.isPrediction);
+    expect(past.map(point => point.historicalRating)).toEqual([1250, 1380]);
+    expect(past[1].timestamp).toBe(1705000000000);
+    const future = result.chartData.filter(point => point.isPrediction);
+    expect(future[0].timestamp).toBe(today.getTime()); expect(future[0].predictedRating).toBe(1380);
     expect(result.projectedRatingAtHorizon).toBeGreaterThan(1380);
-    expect(result.totalProjectedProblems).toBe(180 * 2);
-
-    // Verify first prediction point anchors at current rating
-    const predictionPoints = result.chartData.filter(p => p.isPrediction);
-    expect(predictionPoints[0].predictedRating).toBe(1380);
-
-    // Verify Specialist milestone (1400) is recognized
-    const specialistMilestone = result.milestones.find(m => m.threshold === 1400);
-    expect(specialistMilestone).toBeDefined();
-    expect(specialistMilestone?.achieved).toBe(false);
-    expect(specialistMilestone?.daysRemaining).toBeGreaterThan(0);
-    expect(specialistMilestone?.problemsRemaining).toBeGreaterThan(0);
+    expect(future.every(point => point.lowerBound === undefined && point.upperBound === undefined)).toBe(true);
   });
-
-  it('handles unrated baseline gracefully', () => {
-    const result = generateHorizonProjection([], undefined, { dailyProblems: 2, difficultyOffset: 150, horizonMonths: 3 });
-    expect(result.currentRating).toBe(1200);
-    expect(result.projectedRatingAtHorizon).toBeGreaterThan(1200);
+  it('does not invent an unrated baseline or prediction', () => {
+    const result = generateHorizonProjection([], undefined, undefined, today);
+    expect(result.currentRating).toBeNull(); expect(result.projectedRatingAtHorizon).toBeNull(); expect(result.chartData).toEqual([]);
+  });
+  it('keeps zero and very high official ratings without a fallback', () => {
+    expect(generateHorizonProjection([], 0, undefined, today).currentRating).toBe(0);
+    expect(generateHorizonProjection([], 4000, undefined, today).currentRating).toBe(4000);
+  });
+  it('uses historical timestamps and ratings unchanged after sorting', () => {
+    const points = historicalChartPoints([...history].reverse());
+    expect(points.map(point => point.timestamp)).toEqual([1700000000000, 1705000000000]);
+    expect(points.map(point => point.historicalRating)).toEqual([1250, 1380]);
   });
 });

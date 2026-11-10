@@ -1,75 +1,49 @@
-import browser from 'webextension-polyfill';
+import type browser from 'webextension-polyfill';
+import type { Preferences } from '../types/app';
+import type { CFUser, CFRatingChange, CFSubmission, PredictionParams } from '../types/codeforces';
 
 export interface StorageData {
+  preferences?: Preferences;
   cf_handle?: string;
-  cf_user?: any;
-  cf_ratings?: any[];
-  cf_submissions?: any[];
+  cf_user?: CFUser | null;
+  cf_ratings?: CFRatingChange[];
+  cf_submissions?: CFSubmission[];
   cf_cached_time?: number;
   cf_daily_target?: number;
-  cf_prediction_params?: any;
+  cf_prediction_params?: PredictionParams;
   cf_last_badge_text?: string;
 }
 
-const isExtensionEnvironment = (): boolean => {
-  try {
-    return typeof browser !== 'undefined' && !!browser.storage && !!browser.storage.local;
-  } catch {
-    return false;
-  }
-};
+export type ExtensionApi = typeof browser;
 
+/** Access native Promise-based APIs without evaluating a polyfill in a website. */
+export function getExtensionApi(): ExtensionApi | undefined {
+  const globals = globalThis as typeof globalThis & { browser?: ExtensionApi; chrome?: ExtensionApi };
+  const api = globals.browser ?? globals.chrome;
+  return api?.runtime?.id ? api : undefined;
+}
+
+function requireStorage() {
+  const storage = getExtensionApi()?.storage?.local;
+  if (!storage) throw new Error('CFChart extension storage is unavailable. Load the built add-on in Firefox.');
+  return storage;
+}
+
+/** Extension data never falls back to Codeforces' own localStorage. */
 export const storageService = {
   async get<K extends keyof StorageData>(key: K): Promise<StorageData[K] | undefined> {
-    if (isExtensionEnvironment()) {
-      try {
-        const result = await browser.storage.local.get(key);
-        return result[key] as StorageData[K] | undefined;
-      } catch (err) {
-        console.warn('browser.storage.local.get failed, falling back to localStorage', err);
-      }
-    }
-
-    if (typeof window !== 'undefined' && window.localStorage) {
-      const item = window.localStorage.getItem(`cfchart_${key}`);
-      if (item) {
-        try {
-          return JSON.parse(item) as StorageData[K];
-        } catch {
-          return item as unknown as StorageData[K];
-        }
-      }
-    }
-    return undefined;
+    return (await requireStorage().get(key))[key] as StorageData[K] | undefined;
   },
-
   async set<K extends keyof StorageData>(key: K, value: StorageData[K]): Promise<void> {
-    if (isExtensionEnvironment()) {
-      try {
-        await browser.storage.local.set({ [key]: value });
-        return;
-      } catch (err) {
-        console.warn('browser.storage.local.set failed, falling back to localStorage', err);
-      }
-    }
-
-    if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.setItem(`cfchart_${key}`, JSON.stringify(value));
-    }
+    await requireStorage().set({ [key]: value });
   },
-
   async remove(key: keyof StorageData): Promise<void> {
-    if (isExtensionEnvironment()) {
-      try {
-        await browser.storage.local.remove(key);
-        return;
-      } catch (err) {
-        console.warn('browser.storage.local.remove failed, falling back to localStorage', err);
-      }
-    }
-
-    if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.removeItem(`cfchart_${key}`);
-    }
-  }
+    await requireStorage().remove(key);
+  },
+  async getValue<T>(key: string): Promise<T | undefined> {
+    return (await requireStorage().get(key))[key] as T | undefined;
+  },
+  async setValue<T>(key: string, value: T): Promise<void> {
+    await requireStorage().set({ [key]: value });
+  },
 };
