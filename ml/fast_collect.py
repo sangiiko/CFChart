@@ -80,8 +80,11 @@ def fetch_user(handle):
     return handle, True, f"{len(ratings)} contests, {len(submissions)} subs"
 
 def main():
+    import sys
+    handles_file = Path(sys.argv[1]) if len(sys.argv) > 1 else HANDLES_FILE
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    handles = [line.strip() for line in HANDLES_FILE.read_text().splitlines() if line.strip()]
+    handles = [line.strip() for line in handles_file.read_text().splitlines() if line.strip()]
+    print(f"Reading handles from: {handles_file}")
     print(f"Total handles to process: {len(handles)}")
     success_count = 0
     fail_count = 0
@@ -95,9 +98,10 @@ def main():
                 success_count += 1
             else:
                 fail_count += 1
-            if i % 25 == 0 or i == len(handles):
+            if i % 50 == 0 or i == len(handles):
                 elapsed = time.time() - t0
-                print(f"[{i}/{len(handles)}] Success: {success_count}, Failed: {fail_count}, Elapsed: {elapsed:.1f}s")
+                rate = i / max(1.0, elapsed)
+                print(f"[{i}/{len(handles)}] Success: {success_count}, Failed: {fail_count}, Rate: {rate:.1f} users/s, Elapsed: {elapsed:.1f}s")
 
     print(f"Done in {time.time() - t0:.1f}s! Total success: {success_count}, Total failed: {fail_count}")
 

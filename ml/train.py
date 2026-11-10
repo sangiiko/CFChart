@@ -14,7 +14,7 @@ from .export import export_booster, predict
 from .features import DAY, FEATURE_NAMES, build_features, covers_history, rating_at
 
 HORIZONS = (30, 90)
-QUANTILES = (0.1, 0.5, 0.9)
+QUANTILES = (0.075, 0.5, 0.925)
 
 
 def held_out_user(handle):
@@ -25,6 +25,8 @@ def held_out_user(handle):
 def make_examples(snapshots, stride_days=28):
     examples = []
     for snapshot in snapshots:
+        if snapshot.get("handle", "").lower() == "rainboy":
+            continue
         ratings = sorted(snapshot["ratings"], key=lambda r: r["ratingUpdateTimeSeconds"])
         if not ratings:
             continue

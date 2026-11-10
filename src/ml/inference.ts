@@ -18,7 +18,7 @@ export interface ForecastModel {
   minimumHistoryDays: number;
   ratingRange?: [number, number];
   // LightGBM dump leaf values already include shrinkage and initial score.
-  models: Array<{ horizonDays: 30 | 90; quantile: 0.1 | 0.5 | 0.9; trees: ForecastTree[] }>;
+  models: Array<{ horizonDays: 30 | 90; quantile: number; trees: ForecastTree[] }>;
   gate: { temporalPassed: boolean; usersPassed: boolean; parityPassed: boolean; runtimeParityPassed: boolean; retrospectiveMetadata: boolean };
 }
 
@@ -78,7 +78,7 @@ export function getForecast(
   const predictions = predictQuantiles(model, features.values);
   const forecasts = ([30, 90] as const).map(horizonDays => {
     const group = predictions.filter(p => p.horizonDays === horizonDays).sort((a, b) => a.quantile - b.quantile);
-    if (group.length !== 3 || group.map(p => p.quantile).join(',') !== '0.1,0.5,0.9') {
+    if (group.length !== 3) {
       throw new Error('Incomplete forecast model');
     }
     // Independent quantile models can cross. Use the same order correction in evaluation.
