@@ -14,7 +14,10 @@ from .export import export_booster, predict
 from .features import DAY, FEATURE_NAMES, build_features, covers_history, rating_at
 
 HORIZONS = (30, 90)
-QUANTILES = (0.075, 0.5, 0.925)
+HORIZON_QUANTILES = {
+    30: (0.05, 0.5, 0.95),
+    90: (0.04, 0.5, 0.96),
+}
 
 
 def held_out_user(handle):
@@ -68,8 +71,9 @@ def evaluate(rows, models):
     x = array(rows)
     result = {"rows": len(rows), "users": len({r["handle"] for r in rows}), "horizons": {}}
     for h_index, horizon in enumerate(HORIZONS):
+        quantiles = HORIZON_QUANTILES[horizon]
         actual = np.asarray([r["y"][h_index] for r in rows], dtype=np.float64)
-        raw = np.column_stack([models[(horizon, q)].predict(x) for q in QUANTILES])
+        raw = np.column_stack([models[(horizon, q)].predict(x) for q in quantiles])
         ordered = np.sort(raw, axis=1)
         lower, median, upper = ordered.T
         unchanged = x[:, 0]
@@ -90,7 +94,7 @@ def evaluate(rows, models):
             "meanIntervalWidth": float(np.mean(upper - lower)),
             "quantileCrossingRate": float(np.mean(np.any(np.diff(raw, axis=1) < 0, axis=1))),
             "pinballLoss": {str(q): float(np.mean(np.maximum(q * (actual - raw[:, i]), (q - 1) * (actual - raw[:, i]))))
-                            for i, q in enumerate(QUANTILES)},
+                            for i, q in enumerate(quantiles)},
             "ratingBands": bands,
         }
     return result
@@ -125,7 +129,7 @@ def train(snapshots, output, version, mechanics_only=False, allow_retrospective=
     for index, horizon in enumerate(HORIZONS):
         y = np.asarray([r["y"][index] for r in training], dtype=np.float64)
         dataset = lgb.Dataset(x, label=y, feature_name=list(FEATURE_NAMES), free_raw_data=False)
-        for quantile in QUANTILES:
+        for quantile in HORIZON_QUANTILES[horizon]:
             model = lgb.train({"objective": "quantile", "alpha": quantile, "learning_rate": 0.05,
                                "num_leaves": 15, "min_data_in_leaf": 20, "max_bin": 63,
                                "verbosity": -1, "seed": 42, "num_threads": 1,
@@ -175,7 +179,7 @@ def train(snapshots, output, version, mechanics_only=False, allow_retrospective=
         fixture["samples"].append({"snapshot": compact_snapshot(row), "asOf": row["asOf"], "features": row["x"],
                                    "predictions": [{"horizonDays": h, "quantile": q,
                                                     "value": float(models[(h, q)].predict(np.asarray([row["x"]]))[0])}
-                                                   for h in HORIZONS for q in QUANTILES]})
+                                                   for h in HORIZONS for q in HORIZON_QUANTILES[h]]})
     atomic_json(output / "parity.json", fixture)
     # Run the actual shipped TypeScript preprocessing/evaluator against native
     # LightGBM outputs. An absent Node environment leaves the artifact disabled.
