@@ -17,7 +17,7 @@ CFChart is a browser extension for **Firefox** and **Chromium-based browsers** (
 * **30-Day and 90-Day horizons:** Predicts expected rating trajectory based on contest momentum and recent practice activity.
 * **Calibrated confidence intervals:** Shaded prediction bars illustrate empirical uncertainty margins (85% coverage).
 * **Color-coded forecast points:** Forecast dots are colored by their predicted Codeforces rank tier with a dashed trajectory line connecting from the user's latest contest.
-* **100% browser-local inference:** Powered by an offline-trained LightGBM quantile regression model (`cfchart-2026-11-10-v2`). Runs locally in TypeScript with zero remote API calls, telemetry, or server requirements.
+* **100% browser-local inference:** Powered by an offline-trained LightGBM quantile regression model (`cfchart-top5000-v1`) trained on real historical Codeforces API data from the top 5,000 active rating cohort. Runs locally in TypeScript with zero remote API calls, telemetry, or server requirements.
 
 ### 3. Personal Habit Tracker & Header Flyout
 * **Header pill:** Persistent widget in the Codeforces top navigation bar displaying today's progress towards your daily problem goal and your active streak.
