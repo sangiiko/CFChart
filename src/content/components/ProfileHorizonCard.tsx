@@ -5,6 +5,7 @@ import { HorizonChart } from '../../components/HorizonChart';
 import { getRankTier } from '../../services/codeforcesApi';
 import { bundledForecastModel } from '../../ml';
 import { profileForecast, needsForecastHistory } from '../forecast';
+import { getExtensionApi } from '../../services/storage';
 
 type Profile = Awaited<ReturnType<typeof getProfile>>;
 type Practice = Awaited<ReturnType<typeof getPractice>>;
@@ -52,8 +53,18 @@ export const ProfileHorizonCard: React.FC<Props> = ({ handle, onNativeVisibility
   const forecast = forecastError ? { available: false as const, reason: `Forecast inputs unavailable: ${forecastError}` } : profileForecast(profile, practice, bundledForecastModel);
   const missingForecastHistory = needsForecastHistory(practice, bundledForecastModel);
   const currentRating = profile?.user.rating ?? null;
+  const iconUrl = getExtensionApi()?.runtime?.getURL ? getExtensionApi()?.runtime.getURL('icons/icon-48.png') : undefined;
   return <section className="cf-panel cf-profile" aria-label={`CFChart for ${handle}`}>
-    <div className="cf-panel-heading"><div className="cf-heading-copy"><span className="cf-brand-mark" aria-hidden="true">↗</span><div><h2>CFChart <span className="cf-subtle">/ {handle}</span></h2><p>Your rating, with a clearer view ahead.</p></div></div></div>
+    <div className="cf-panel-heading">
+      <div className="cf-heading-copy">
+        <span className="cf-brand-mark" aria-hidden="true">
+          {iconUrl ? <img src={iconUrl} width="24" height="24" alt="CFChart" /> : '↗'}
+        </span>
+        <div>
+          <h2>{handle}</h2>
+        </div>
+      </div>
+    </div>
     {loading && <div className="cf-empty" role="status"><span className="cf-spinner" /> Loading official rating history…</div>}
     {error && <div className="cf-notice cf-error" role="alert">{error} <button type="button" className="cf-link" onClick={() => setRetry(value => value + 1)}>Retry</button><p>The original chart stays available below.</p></div>}
     {profile && !loading && <>
@@ -61,10 +72,6 @@ export const ProfileHorizonCard: React.FC<Props> = ({ handle, onNativeVisibility
       {profile.error && <p className="cf-notice" role="status">{profile.error} {profile.stale ? 'Showing saved history.' : 'Some profile data is unavailable.'}</p>}
       <HorizonChart data={historicalChartPoints(profile.ratings)} currentRating={currentRating} forecasts={forecast.available ? forecast.forecasts : []} />
       <div className="cf-forecast-note">
-        <div className="cf-forecast-header">
-          <span className="cf-small-label">ML RATING FORECAST</span>
-          {forecast.available && <span className="cf-confidence-badge" title="Trained and calibrated on 1,600+ users to ensure 85% empirical coverage on unseen holdout contests">85% Calibrated Confidence</span>}
-        </div>
         {forecast.available ? <>
           <div className="cf-forecast-grid">
             {forecast.forecasts.map(p => {
@@ -79,14 +86,12 @@ export const ProfileHorizonCard: React.FC<Props> = ({ handle, onNativeVisibility
                   <span className="cf-forecast-margin">±{margin} pts</span>
                 </div>
                 <div className="cf-forecast-range">
-                  <span>85% interval:</span>
                   <strong>{p.lower} – {p.upper}</strong>
                   {delta != null && <span className={`cf-forecast-delta ${delta >= 0 ? 'is-up' : 'is-down'}`}>{delta >= 0 ? `+${delta}` : delta} vs now</span>}
                 </div>
               </div>;
             })}
           </div>
-          <p className="cf-forecast-caption">Model {forecast.version}. Predictions calibrated to 85% coverage on unseen holdout contests. Shaded error bars depict the uncertainty margin for each time horizon.</p>
         </> : <p>{forecast.reason}</p>}
         {forecastError && <p className="cf-error" role="alert">{forecastError}</p>}
         {bundledForecastModel && (missingForecastHistory || forecastError || practice?.stale || practice?.error) && <button type="button" className="cf-link" disabled={forecastLoading} onClick={() => syncForecast(missingForecastHistory)}>{forecastLoading ? 'Syncing forecast inputs…' : missingForecastHistory ? 'Sync more forecast history' : 'Refresh forecast inputs'}</button>}

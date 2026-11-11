@@ -86,13 +86,13 @@ export const HorizonChart: React.FC<HorizonChartProps> = ({ data, currentRating,
               strokeWidth="1.5"
               tabIndex={0}
             >
-              <title>{`${p.horizonDays}-day forecast · ${p.median} (${tier.name}) · 85% confidence interval ${p.lower}–${p.upper} (±${Math.round((p.upper - p.lower) / 2)} pts)`}</title>
+              <title>{`${p.horizonDays}-day forecast · ${p.median} (${tier.name}) · Range: ${p.lower}–${p.upper} (±${Math.round((p.upper - p.lower) / 2)} pts)`}</title>
             </circle>
           </g>
         );
       })}
     </svg>
-    <div className="cf-chart-legend"><span><i className="cf-history-key" />Official rating</span>{scenario.length > 0 && <span><i className="cf-scenario-key" />Illustrative scenario</span>}{forecasts.length > 0 && <span><i className="cf-forecast-key" />85% confidence forecast</span>}<span className="cf-chart-hint">Hover a contest point for details</span></div>
+    <div className="cf-chart-legend"><span><i className="cf-history-key" />Official rating</span>{scenario.length > 0 && <span><i className="cf-scenario-key" />Illustrative scenario</span>}{forecasts.length > 0 && <span><i className="cf-forecast-key" />Rating forecast</span>}<span className="cf-chart-hint">Hover a contest point for details</span></div>
     <details className="cf-history-table"><summary>Contest history ({history.length})</summary><div className="cf-table-scroll"><table><thead><tr><th>Date</th><th>Contest</th><th>Rank</th><th>Rating</th></tr></thead><tbody>{[...history].reverse().map((p, i) => <tr key={`${p.timestamp}-${i}`}><td>{preciseDate(p.timestamp)}</td><td>{p.contestName}</td><td>{p.rank ?? '—'}</td><td style={{ color: p.rankColor }}>{p.historicalRating}</td></tr>)}</tbody></table></div></details>
   </div>;
 };
