@@ -11,6 +11,7 @@ export function calculateHabitProgress(
   referenceDate = new Date(),
   coverage: HistoryCoverage = { complete: true, loaded: submissions.length },
   events: PracticeEvent[] = [],
+  removedSolves: { day: string; problemKey: string }[] = [],
 ): HabitProgress {
   dailyTarget = Number.isFinite(dailyTarget) ? Math.max(1, Math.floor(dailyTarget)) : 2;
   const solvedByDate = new Map<string, Map<string, SolvedProblemSummary>>();
@@ -54,6 +55,8 @@ export function calculateHabitProgress(
       });
     }
   }
+
+  for (const removed of removedSolves) solvedByDate.get(removed.day)?.delete(removed.problemKey);
 
   const todayStr = format(referenceDate, 'yyyy-MM-dd');
   const todayProblems = [...(solvedByDate.get(todayStr)?.values() ?? [])].sort((a, b) => b.timestamp - a.timestamp);

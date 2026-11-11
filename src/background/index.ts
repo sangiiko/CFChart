@@ -45,6 +45,10 @@ async function refreshHabitStatus(force = false) {
 async function handleRequest(message: ExtensionRequest): Promise<ExtensionResponse> {
   try {
     switch (message.action) {
+      case 'removeTodaySolve':
+        await dataBroker.removeTodaySolve(message.handle, message.key);
+        await refreshHabitStatus();
+        return { ok: true, data: undefined };
       case 'recordPracticeFeedback':
         await dataBroker.recordPracticeFeedback(message.handle, message.feedback);
         return { ok: true, data: undefined };

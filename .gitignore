@@ -30,3 +30,6 @@ pnpm-debug.log*
 *.sln
 *.sw?
 .DS_Store
+
+# Generated Firefox update feed
+/updates.json

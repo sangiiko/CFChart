@@ -360,13 +360,16 @@ export function createDataBroker(options: BrokerOptions = {}) {
           state.mode = preferences.practiceMode;
           const previous = saved?.version === 1 && saved.policy === POLICY_VERSION && saved.day === day ? saved.items : [];
           const latest = latestEvents(ledger.events.filter(e => format(new Date(e.timestamp), 'yyyy-MM-dd') === day));
+          const removed = new Set((ledger.removedSolves ?? []).filter(r => r.day === day).map(r => r.problemKey));
           const finished = previous.filter(p => {
+            if (removed.has(problemKey(p))) return false;
             const event = latest.get(problemKey(p));
             return event ? !['skipped', 'already-solved'].includes(event.outcome) : p.slot !== 'revisit' && state.solved.has(problemKey(p));
           });
           const seenOutsideKeys = new Set<string>();
           const outsideProblems: RecommendedProblem[] = [];
           for (const e of latest.values()) {
+            if (removed.has(e.problemKey)) continue;
             if (!['skipped', 'already-solved'].includes(e.outcome) && !previous.some(p => problemKey(p) === e.problemKey)) {
               if (!seenOutsideKeys.has(e.problemKey)) {
                 seenOutsideKeys.add(e.problemKey);
@@ -399,7 +402,7 @@ export function createDataBroker(options: BrokerOptions = {}) {
       }
       return {
         handle, submissions: cached.submissions, updatedAt: cached.updatedAt, coverage,
-        progress: calculateHabitProgress(cached.submissions, preferences.dailyTarget, new Date(now()), coverage, ledger.events),
+        progress: calculateHabitProgress(cached.submissions, preferences.dailyTarget, new Date(now()), coverage, ledger.events, ledger.removedSolves),
         recommendations, error: errors.length ? [...new Set(errors)].join(' ') : undefined,
         stale: errors.length > 0 || now() - cached.updatedAt >= PRACTICE_TTL,
       };
@@ -476,6 +479,18 @@ export function createDataBroker(options: BrokerOptions = {}) {
       ledger: await storage.getValue<PracticeLedger>(ledgerKey(handle)) ?? emptyLedger(),
       plan: await storage.getValue<PracticePlan>(planKey(handle)) ?? null }));
   }
+  async function removeTodaySolve(handle: string, key: string): Promise<void> {
+    handle = normalizeHandle(handle);
+    if (!/^\d+-\w+$/.test(key)) throw new Error('Invalid problem key.');
+    await locked(`cfchart:practice:${handle.toLowerCase()}`, async () => {
+      const ledger = await storage.getValue<PracticeLedger>(ledgerKey(handle)) ?? emptyLedger();
+      const day = format(new Date(now()), 'yyyy-MM-dd');
+      const removedSolves = ledger.removedSolves ?? [];
+      if (!removedSolves.some(r => r.day === day && r.problemKey === key)) {
+        await storage.setValue(ledgerKey(handle), { ...ledger, removedSolves: [...removedSolves, { day, problemKey: key }] });
+      }
+    });
+  }
   async function clearPracticeData(handle: string): Promise<void> {
     handle = normalizeHandle(handle);
     await locked(`cfchart:practice:${handle.toLowerCase()}`, async () => {
@@ -484,7 +499,7 @@ export function createDataBroker(options: BrokerOptions = {}) {
     });
   }
   return { getPreferences, updatePreferences, detectViewer, getProfile, getPractice,
-    recordPracticeFeedback, exportPracticeData, clearPracticeData, practiceSession };
+    recordPracticeFeedback, exportPracticeData, clearPracticeData, practiceSession, removeTodaySolve };
 }
 
 export const dataBroker = createDataBroker();

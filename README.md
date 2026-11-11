@@ -96,3 +96,18 @@ Record an independent solve, assisted solve, timeout, interruption, skip, or pre
 Skipping replaces a task when the remaining budget permits; completed and timed-out assignments consume their reserved allowance. Minutes reported above that allowance also count. Plans and feedback stay local and can be exported or deleted in the practice panel. No research telemetry is enabled. Solve probabilities and predicted learning gains remain unavailable pending validation.
 
 Implementation status and research gates: [recommender optimization plan](RECOMMENDER_OPTIMIZATION_PLAN.md).
+
+## Automatic Firefox updates (installed via about:addons)
+
+CFChart uses a self-hosted update feed on GitHub Releases; a store listing is not needed.
+This unsigned distribution is for Firefox installations already configured to allow it.
+
+1. Download `cfchart.xpi` from https://github.com/sangiiko/CFChart/releases/latest.
+2. In `about:addons`, use the gear menu → **Install Add-on From File** once to install version 2.0.1 or later over your existing installation.
+3. Keep automatic updates enabled for CFChart. Future published versions update through Firefox. Use the gear menu → **Check for Updates** to check immediately.
+
+The extension ID stays `cfchart@sangiko.extension`, preserving its local data. Refresh open Codeforces pages after an update. Local rebuilds alone do not publish updates.
+
+Every push to `main` runs tests and builds the extension in GitHub Actions. If its version has no release yet, the workflow publishes `cfchart.xpi` and `updates.json` together. The feed contains the exact package SHA-256 and a version-specific download URL. Existing releases are never overwritten.
+
+For the next release, update `package.json`, the root and root-package versions in `package-lock.json`, and `public/manifest.json` to the same higher version, then commit and push to `main`. The repository and release assets must be publicly accessible, and GitHub Actions must be enabled. Generated `updates.json` and XPI files are not committed.

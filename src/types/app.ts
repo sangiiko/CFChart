@@ -59,6 +59,7 @@ export interface CachedCatalog {
 
 export type RequestOptions = { force?: boolean; syncMore?: boolean; resetHistory?: boolean };
 export type ExtensionRequest =
+  | { type: 'CFCHART_REQUEST'; action: 'removeTodaySolve'; handle: string; key: string }
   | { type: 'CFCHART_REQUEST'; action: 'recordPracticeFeedback'; handle: string; feedback: PracticeFeedback }
   | { type: 'CFCHART_REQUEST'; action: 'exportPracticeData'; handle: string }
   | { type: 'CFCHART_REQUEST'; action: 'clearPracticeData'; handle: string }

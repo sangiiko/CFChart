@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -46,7 +47,19 @@ writeFileSync('dist-chrome/manifest.json', JSON.stringify(chromeManifest, null, 
 try {
   execFileSync('zip', ['-r', '-FS', '-q', resolve('cfchart.xpi'), '.'], { cwd: resolve('dist'), stdio: 'inherit' });
 } catch (error) {
-  console.warn('Could not create cfchart.xpi:', error.message);
+  throw new Error('Could not create cfchart.xpi', { cause: error });
 }
 
 console.log('\nCFChart is ready.\n- For Firefox: Load dist/manifest.json in about:debugging or install cfchart.xpi\n- For Chrome / Brave / Edge: Load dist-chrome/ as Unpacked Extension in chrome://extensions');
+
+// Publish this feed alongside the exact XPI whose hash it describes.
+const packageVersion = JSON.parse(readFileSync('package.json', 'utf8')).version;
+if (manifest.version !== packageVersion) throw new Error('Package and manifest versions must match.');
+const gecko = manifest.browser_specific_settings.gecko;
+const updates = { addons: { [gecko.id]: { updates: [{
+  version: manifest.version,
+  update_link: `https://github.com/sangiiko/CFChart/releases/download/v${manifest.version}/cfchart.xpi`,
+  update_hash: `sha256:${createHash('sha256').update(readFileSync('cfchart.xpi')).digest('hex')}`,
+  applications: { gecko: { strict_min_version: gecko.strict_min_version } },
+}] } } };
+writeFileSync('updates.json', JSON.stringify(updates, null, 2) + '\n');

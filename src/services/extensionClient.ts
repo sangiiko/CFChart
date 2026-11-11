@@ -45,3 +45,5 @@ export const exportPracticeData = (handle: string) => request<unknown>({ type: '
 export const clearPracticeData = (handle: string) => request<void>({ type: 'CFCHART_REQUEST', action: 'clearPracticeData', handle });
 
 export const practiceSession = (handle: string, key: string, event?: { id: string; action: SessionAction }) => request<SessionState | null>({ type: 'CFCHART_REQUEST', action: 'practiceSession', handle, key, event });
+
+export const removeTodaySolve = (handle: string, key: string) => request<void>({ type: 'CFCHART_REQUEST', action: 'removeTodaySolve', handle, key });

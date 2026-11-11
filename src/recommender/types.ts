@@ -40,7 +40,7 @@ export interface PracticeAssignment {
   /** Deterministic baseline assignment; does not support evaluation of other actions. */
   selectionProbability: 1;
 }
-export interface PracticeLedger { version: 1; events: PracticeEvent[]; sessions?: SessionEvent[]; assignments?: PracticeAssignment[] }
+export interface PracticeLedger { removedSolves?: { day: string; problemKey: string }[]; version: 1; events: PracticeEvent[]; sessions?: SessionEvent[]; assignments?: PracticeAssignment[] }
 export interface PracticePlan {
   version: 1;
   policy: 'adaptive-baseline-v1';

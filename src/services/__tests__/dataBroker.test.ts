@@ -378,3 +378,20 @@ describe('review regressions', () => {
     expect(events[1]).toMatchObject({ outcome: 'accepted', assistance: 'unknown', provenance: 'codeforces-api' });
   });
 });
+
+it('removes a solve locally across refreshes without hiding a later day or another account', async () => {
+  const { broker, api, submission, advance } = fixture();
+  api.fetchSubmissionPage.mockResolvedValue([submission(3000)]);
+  expect((await broker.getPractice('alice')).progress.todayCount).toBe(1);
+  await broker.removeTodaySolve('alice', '3000-A');
+  await broker.removeTodaySolve('alice', '3000-A');
+  const refreshed = await broker.getPractice('alice', { force: true });
+  expect(refreshed.progress.todayCount).toBe(0);
+  expect(refreshed.progress.todayProblems).toEqual([]);
+  expect(refreshed.submissions).toHaveLength(1);
+  expect((await broker.exportPracticeData('alice')).ledger.removedSolves).toHaveLength(1);
+  expect((await broker.getPractice('bob')).progress.todayCount).toBe(1);
+  advance(86400000);
+  api.fetchSubmissionPage.mockResolvedValue([submission(3000)]);
+  expect((await broker.getPractice('alice', { force: true })).progress.todayCount).toBe(1);
+});

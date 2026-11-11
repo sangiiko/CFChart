@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "CFChart: Codeforces Charts & Practice",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Enhanced in-page Codeforces rating charts, ML rating forecasts, daily practice streaks, and intelligent problem recommendations.",
   "icons": {
     "16": "icons/icon-16.png",
@@ -32,7 +32,9 @@
     "*://codeforces.org/*"
   ],
   "background": {
-    "scripts": ["background.js"]
+    "scripts": [
+      "background.js"
+    ]
   },
   "content_scripts": [
     {
@@ -44,13 +46,17 @@
         "*://*.codeforces.org/*",
         "*://codeforces.org/*"
       ],
-      "js": ["content.js"],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_end"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["icons/*"],
+      "resources": [
+        "icons/*"
+      ],
       "matches": [
         "*://*.codeforces.com/*",
         "*://codeforces.com/*",
@@ -69,7 +75,8 @@
         "required": [
           "none"
         ]
-      }
+      },
+      "update_url": "https://github.com/sangiiko/CFChart/releases/latest/download/updates.json"
     }
   }
 }
