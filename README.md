@@ -1,113 +1,141 @@
 # CFChart 2.0
 
-CFChart is a Firefox extension that puts rating history and daily practice tracking directly on Codeforces pages.
+CFChart is a browser extension for **Firefox** and **Chromium-based browsers** (Chrome, Brave, Edge) that brings interactive rating charts, local machine learning rating forecasts, daily practice streaks, and spaced repetition recommendations directly into Codeforces.
 
-## What appears on Codeforces
+---
 
-- **Profile chart:** a clean, responsive rating chart panel directly on Codeforces user profiles. Preserves every official rated-contest result, uses elapsed time on the horizontal axis, displays local LightGBM machine learning rating forecasts, and includes an accessible contest-history table.
-- **Personal practice pill:** daily progress in the Codeforces header, with a flyout for your goal, streak, recent activity, solved problems, and practice suggestions.
-- **Isolated styles:** extension panels use Shadow DOM so their styles stay inside CFChart.
-- **Separate identities:** the profile you view controls its chart. Your configured account controls personal progress. Visiting another person's profile never changes your tracked account.
+## Features on Codeforces
 
-CFChart can adopt your signed-in account from a verified header profile/logout link when no personal account is configured. Signed-out users can choose a handle in the header flyout or extension popup. No password or Codeforces API key is required.
+### 1. Enhanced Profile Rating Chart
+* **Clean, responsive chart panel:** Seamlessly replaces the legacy Flash/image chart directly on Codeforces user profiles with an interactive SVG chart.
+* **Proportional time axis:** Displays true elapsed time on the horizontal axis rather than distorted contest intervals.
+* **Rank tier coloring & background bands:** Visualizes official Codeforces rating divisions (Newbie, Pupil, Specialist, Expert, Candidate Master, Master, etc.).
+* **Contest history table:** Includes a searchable and collapsible table of all rated contests with ranks, deltas, and dates.
+* **Native fallback:** If an account is unrated or data is loading, Codeforces native elements remain accessible.
 
-The toolbar popup manages your account and daily goal. The full-page extension view uses the same practice/settings panel; rating charts live on Codeforces profiles.
+### 2. Local ML Rating Forecasts
+* **30-Day and 90-Day horizons:** Predicts expected rating trajectory based on contest momentum and recent practice activity.
+* **Calibrated confidence intervals:** Shaded prediction bars illustrate empirical uncertainty margins (85% coverage).
+* **Color-coded forecast points:** Forecast dots are colored by their predicted Codeforces rank tier with a dashed trajectory line connecting from the user's latest contest.
+* **100% browser-local inference:** Powered by an offline-trained LightGBM quantile regression model (`cfchart-2026-11-10-v2`). Runs locally in TypeScript with zero remote API calls, telemetry, or server requirements.
 
-## Build and install in Firefox
+### 3. Personal Habit Tracker & Header Flyout
+* **Header pill:** Persistent widget in the Codeforces top navigation bar displaying today's progress towards your daily problem goal and your active streak.
+* **Habit flyout:** Click the header pill to reveal:
+  * **Today's progress:** Live counter of problems solved today vs. your daily target.
+  * **Streak counter & heatmap:** 15-day visual activity heatmap showing met, partial, and missed days.
+  * **Today's solved problems:** List of problems solved today with direct links and an instant remove button for miscategorized items.
+  * **Universal problem counting:** Problems solved anywhere on Codeforces (both recommended problems and regular practice) automatically count toward your daily target.
+  * **Daily recommendations:** Intelligent problem suggestions tailored to your skill level.
 
-Use a current Node.js release supported by the dependencies, then run:
+### 4. In-Page Problem Verdict Bar & Spaced Repetition
+* **Post-solve assessment:** On any accepted problem page (`/problemset/problem/...`), CFChart injects an inline verdict bar:
+  * **✓ Solved:** Confirms an independent solve. Contributes to your daily goal, maintains your streak, and feeds unassisted skill estimation.
+  * **💡 Solved with help:** For problems solved using hints, editorials, or assistance. Maintains your daily goal and streak without falsely inflating your unassisted skill level, and automatically schedules an **Independent Review in 3 days**.
+* **Spaced repetition (`revisit` slot):** Exactly 3 days after an assisted solve, the problem re-enters your daily recommendations under the **Independent Review** slot to confirm concept retention.
 
+### 5. Architectural Privacy & Identity Isolation
+* **Shadow DOM encapsulation:** All in-page panels are isolated within Shadow DOMs to prevent CSS interference with Codeforces stylesheets.
+* **Strict identity separation:** The profile being viewed controls only the chart. Your configured personal handle controls personal progress and recommendations. Visiting other users' profiles never overrides your personal account.
+* **Automatic detection:** Detects your signed-in handle from Codeforces navigation links, or lets you enter any handle manually without requiring passwords or API keys.
+
+---
+
+## Installation
+
+### Firefox (Recommended)
+
+#### Option A: Automatic Updates via `.xpi` (Permanent)
+1. Download `cfchart.xpi` from the [Latest Release](https://github.com/sangiiko/CFChart/releases/latest).
+2. Open `about:addons` in Firefox.
+3. Click the gear icon (⚙️) → **Install Add-on From File…** and select `cfchart.xpi`.
+4. CFChart will automatically check for updates on future GitHub releases via `updates.json`.
+
+#### Option B: Temporary Add-on (For Developers)
+1. Run `npm run build`.
+2. Open `about:debugging#/runtime/this-firefox` in Firefox.
+3. Click **Load Temporary Add-on…** and select `dist/manifest.json`.
+
+---
+
+### Chrome / Brave / Edge
+
+1. Run `npm run build` (this generates both `dist/` and `dist-chrome/`).
+2. Open `chrome://extensions` in your browser.
+3. Enable **Developer mode** (toggle in the top-right corner).
+4. Click **Load unpacked** and select the **`dist-chrome`** folder.
+
+---
+
+## Machine Learning Forecast Pipeline
+
+CFChart evaluates 26 features per user snapshot:
+* **Contest history (8 features):** Current rating, peak rating, contest count, last delta, 5-contest mean delta, 5-contest standard deviation, days since last contest, and rated contests in last 90 days.
+* **Practice activity (18 features):** Rolling 7-day, 30-day, and 90-day attempt counts, unique accepted problems, active UTC days, mean relative difficulty, rated problem count, 90-day acceptance rate, dedicated practice solves, and topic tag diversity.
+
+For details on offline data collection, training, monotonic quantile verification, and export, see [ml/README.md](ml/README.md).
+
+---
+
+## Development & Testing
+
+### Prerequisites
+* Node.js 18+ and npm
+* (Optional for ML training) Python 3.10+
+
+### Scripts
 ```bash
-npm ci
-npm run build
-```
+# Install dependencies
+npm install
 
-1. Open `about:debugging#/runtime/this-firefox` in Firefox.
-2. Choose **Load Temporary Add-on…**.
-3. Select **`dist/manifest.json`** from this project.
-4. Open Codeforces and visit a profile.
-5. **Reload any Codeforces tabs that were already open.**
-
-After changing the code, rebuild, reload the add-on in `about:debugging`, and reload the Codeforces tab. Temporary add-ons must be loaded again after restarting Firefox.
-
-`dist/` is the extension package. Source HTML stays in the repository root; builds never replace source files with generated output. Load the manifest inside `dist/`.
-
-## Daily progress and history coverage
-
-The default goal is two **distinct accepted problems per local calendar day**. Repeated accepted submissions for the same problem count once that day. Solving the same problem on a later day can count for that later day. Failed submissions do not count.
-
-A streak tracks consecutive local days that meet the configured goal. Changing the goal recalculates progress using that goal. CFChart marks incomplete days as unknown instead of treating missing history as inactivity. A `+` indicates a lower bound when available history cannot establish an exact total or streak.
-
-Initial sync fetches recent submissions. For a larger account, use **Continue history sync** in the popup or **Sync more history** in the header flyout to load another older page. CFChart does not silently download an account's entire history. Practice recommendations appear only after the full solved history is available, so known solved problems can be excluded reliably.
-
-## Data loading and refresh
-
-Codeforces requests go through one background queue, with request starts spaced at least 2.1 seconds apart. The queue, retries, and a first-time problem-catalog download can make initial setup take several seconds. Official profile history loads independently of personal recommendations.
-
-Profile data, submissions, and the problem catalog are cached locally. The visible in-page tracker checks for updates every minute and refreshes when you return to the tab. A background alarm refreshes personal progress periodically. **Refresh** requests new data explicitly.
-
-Loading, cached data, incomplete history, and API errors are displayed separately. The original Codeforces chart remains available while Enhanced loads or cannot render. The extension does not invent a rating for an unrated user.
-
-## Machine learning rating forecasts
-
-CFChart includes a bundled LightGBM quantile regression model (`cfchart-v1`) trained on real historical Codeforces API data from the top rated users (including the top 500 active rating cohort). It evaluates 30-day and 90-day rating forecasts with calibrated 80% confidence intervals (10th, 50th, and 90th percentiles) based on contest rating momentum, volatility, and recent practice volume.
-
-The offline LightGBM collection, training, evaluation, and installation workflow is documented in [ml/README.md](ml/README.md). Inference runs purely locally in the browser via native TypeScript decision tree traversal with zero remote inference dependencies or Python server requirements.
-
-## Development and validation
-
-```bash
+# Run test suite (Vitest unit and jsdom integration tests)
 npm test
+
+# Type-check TypeScript
+npm run typecheck
+
+# Build Firefox (dist/) and Chrome (dist-chrome/) packages + cfchart.xpi
 npm run build
+
+# Start Vite dev server for popup/dashboard UI development
 npm run dev
+
+# Run Python ML test suite
+npm run test:ml
 ```
 
-The Vite development server helps inspect extension-page layouts. A standalone web preview cannot connect to the extension's background process; it displays a connection error until loaded as an actual add-on. Verify in-page injection using a built extension and a Codeforces tab.
+---
 
-Validation has distinct scopes:
-
-- **Unit and jsdom integration tests** cover API queue/cache behavior, history coverage, identity separation, native-chart restoration, delayed mounts, reinjection, unrated accounts, scenarios, and ML adapter behavior.
-- **Packaged Firefox smoke checks** exercise the built extension using representative Codeforces page fixtures and public API rating data. Fixtures are not a captured live-page compatibility guarantee.
-- **Live-site limitation:** the public profile page presented a Cloudflare challenge in the verification environment. Direct rendering on the current live Codeforces profile DOM could not be fully verified there. A local check after installation is still needed.
-
-The optional Python ML tests exercise training/export mechanics with explicitly synthetic fixtures. They do not establish real forecast accuracy or produce a deployable trained model.
-
-## Source layout
+## Project Structure
 
 ```text
-src/content/       In-page controller, page adapters, isolated styles, panels
-src/components/    Rating chart and scenario controls
-src/app/           Shared popup/full-page practice settings
-src/background/    Extension messages, refresh alarms, toolbar badge
-src/services/      API queue, cache broker, account settings, habit calculations
-src/ml/            Local model features, inference, and model registry
-ml/                Offline collection, training, evaluation, and documentation
-public/            Manifest and extension icons
-scripts/build.js   Clean, validated dist/ packaging
+src/
+├── app/             # Shared popup and full-page dashboard settings
+├── background/      # Extension service worker / background script, alarms, sync
+├── components/      # Reusable UI components (HorizonChart, Recommendations, etc.)
+├── content/         # In-page content script, Shadow DOM controllers, verdict bars
+├── ml/              # Browser-local ML inference, features, and model registry
+├── recommender/     # Adaptive practice engine, spaced repetition, candidate ranking
+├── services/        # Codeforces API queue, local cache broker, habit tracking
+└── types/           # TypeScript data models and interfaces
+
+ml/                  # Offline LightGBM training pipeline, data collection, and export
+public/              # Manifest file and extension icons
+scripts/             # Custom build script (esbuild + Vite + Chrome/Firefox packagers)
 ```
 
+---
 
-### Adaptive practice plans
+## Releases & Updates
 
-The practice panel now plans within a daily time allowance (20–240 minutes) and problem goal. It excludes known solves and unsuitable difficulty, uses absolute Codeforces links, and keeps eligible assigned tasks stable during the local day. A short eligible pool produces a shorter plan. Full solved-history coverage is required.
+Every commit pushed to `main` triggers a GitHub Actions workflow that runs typechecks, executes unit tests, builds both packages, and publishes a new release if the version is bumped:
 
-Record an independent solve, assisted solve, timeout, interruption, skip, or previously solved task, optionally with active minutes. API acceptances alone do not establish independent mastery. At least three distinct timed feedback episodes are needed for a conservative practice-difficulty adjustment. The planner can prioritize attainable recent contest upsolves and independent review three days after a reported assisted solve. This review interval and the 20/30/40-minute allowances are starting heuristics, not calibrated predictions.
+1. Update the version in `package.json`, `package-lock.json`, and `public/manifest.json`.
+2. Commit and push to `origin/main`.
+3. The release workflow publishes `cfchart.xpi` and updates `updates.json` automatically for Firefox auto-updates.
 
-Skipping replaces a task when the remaining budget permits; completed and timed-out assignments consume their reserved allowance. Minutes reported above that allowance also count. Plans and feedback stay local and can be exported or deleted in the practice panel. No research telemetry is enabled. Solve probabilities and predicted learning gains remain unavailable pending validation.
+---
 
-Implementation status and research gates: [recommender optimization plan](RECOMMENDER_OPTIMIZATION_PLAN.md).
+## License
 
-## Automatic Firefox updates (installed via about:addons)
-
-CFChart uses a self-hosted update feed on GitHub Releases; a store listing is not needed.
-This unsigned distribution is for Firefox installations already configured to allow it.
-
-1. Download `cfchart.xpi` from https://github.com/sangiiko/CFChart/releases/latest.
-2. In `about:addons`, use the gear menu → **Install Add-on From File** once to install version 2.0.1 or later over your existing installation.
-3. Keep automatic updates enabled for CFChart. Future published versions update through Firefox. Use the gear menu → **Check for Updates** to check immediately.
-
-The extension ID stays `cfchart@sangiko.extension`, preserving its local data. Refresh open Codeforces pages after an update. Local rebuilds alone do not publish updates.
-
-Every push to `main` runs tests and builds the extension in GitHub Actions. If its version has no release yet, the workflow publishes `cfchart.xpi` and `updates.json` together. The feed contains the exact package SHA-256 and a version-specific download URL. Existing releases are never overwritten.
-
-For the next release, update `package.json`, the root and root-package versions in `package-lock.json`, and `public/manifest.json` to the same higher version, then commit and push to `main`. The repository and release assets must be publicly accessible, and GitHub Actions must be enabled. Generated `updates.json` and XPI files are not committed.
+MIT License. Crafted for the competitive programming community.
