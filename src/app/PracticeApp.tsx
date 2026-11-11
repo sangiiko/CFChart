@@ -1,3 +1,4 @@
+import { PracticeRecommendations } from '../components/PracticeRecommendations';
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { getPreferences, getPractice, getProfile, subscribeToChanges, updatePreferences } from '../services/extensionClient';
 import type { PracticeSnapshot, Preferences } from '../types/app';
@@ -49,11 +50,12 @@ export function PracticeApp({ fullPage = false }: { fullPage?: boolean }) {
     const form = new FormData(event.currentTarget);
     const handle = String(form.get('handle') ?? '').trim();
     const dailyTarget = Number(form.get('target'));
+    const practiceMinutes = Number(form.get('minutes'));
     setLoading(true);
     setError('');
     try {
       const user = handle ? (await getProfile(handle)).user : null;
-      const prefs = await updatePreferences({ personalHandle: user?.handle ?? null, dailyTarget });
+      const prefs = await updatePreferences({ personalHandle: user?.handle ?? null, dailyTarget, practiceMinutes, practiceMode: String(form.get('mode')) as Preferences['practiceMode'] });
       setPreferences(prefs);
       setEditing(false);
       setPractice(null);
@@ -86,6 +88,10 @@ export function PracticeApp({ fullPage = false }: { fullPage?: boolean }) {
           <select id="daily-target" name="target" defaultValue={preferences?.dailyTarget ?? 2}>
             {Array.from({ length: 10 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1} {i ? 'problems' : 'problem'} / day</option>)}
           </select>
+          <label htmlFor="practice-mode">Practice mode</label>
+          <select id="practice-mode" name="mode" defaultValue={preferences?.practiceMode ?? 'adaptive'}><option value="adaptive">Adaptive practice</option><option value="timed">Timed mixed practice</option><option value="guided">Guided study</option><option value="transfer">Independent transfer probes</option></select>
+          <label htmlFor="practice-minutes">Daily practice time (minutes)</label>
+          <input id="practice-minutes" name="minutes" type="number" min="20" max="240" defaultValue={preferences?.practiceMinutes ?? 60} required />
           <p className="muted">Distinct accepted problems per local day. Repeat acceptances count once per day. Browsing other profiles never switches this account.</p>
           <div className="button-row"><button className="button button--primary" disabled={loading}>{loading ? 'Saving…' : 'Save account & goal'}</button>{personalHandle && <button type="button" className="button" onClick={() => setEditing(false)}>Cancel</button>}</div>
         </form>
@@ -109,7 +115,7 @@ export function PracticeApp({ fullPage = false }: { fullPage?: boolean }) {
 
           {snapshot && !snapshot.coverage.complete && <div className="notice"><strong>History sync in progress</strong><p>{snapshot.coverage.loaded.toLocaleString()} submissions loaded. Older activity may be incomplete. Recommendations appear after the full solved history is checked.</p><button className="button" disabled={loading} onClick={() => void load({ syncMore: true })}>{loading ? 'Syncing…' : 'Continue history sync'}</button></div>}
 
-          {snapshot?.coverage.complete && <section className="workout"><h2>Next practice</h2>{snapshot.recommendations.length ? snapshot.recommendations.map(problem => <a key={problem.url} className="problem-link" href={problem.url} target="_blank" rel="noreferrer"><span><small>{problem.type === 'warmup' ? 'WARMUP' : 'STRETCH'} · {problem.rating}</small><strong>{problem.contestId}{problem.index}. {problem.name}</strong></span><span aria-hidden="true">↗</span></a>) : <p className="muted">No suitable unsolved tasks are available right now.</p>}</section>}
+          {snapshot?.coverage.complete && <PracticeRecommendations key={personalHandle} handle={personalHandle} recommendations={snapshot.recommendations} budget={preferences?.practiceMinutes ?? 60} />}
 
           <div className="button-row"><a className="button button--primary" href={`https://codeforces.com/profile/${encodeURIComponent(personalHandle)}`} target="_blank" rel="noreferrer">Open my in-page chart ↗</a><button className="button" disabled={loading} onClick={() => void load({ force: true })}>{loading ? 'Syncing…' : 'Refresh'}</button></div>
         </>

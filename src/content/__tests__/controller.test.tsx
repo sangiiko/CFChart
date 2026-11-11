@@ -3,7 +3,17 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Preferences, PracticeSnapshot, ProfileSnapshot } from '../../types/app';
 
-const client = vi.hoisted(() => ({ getPreferences: vi.fn(), updatePreferences: vi.fn(), detectViewer: vi.fn(), getProfile: vi.fn(), getPractice: vi.fn(), subscribeToChanges: vi.fn() }));
+const client = vi.hoisted(() => ({
+  practiceSession: vi.fn(async () => null),
+  getPreferences: vi.fn(),
+  updatePreferences: vi.fn(),
+  detectViewer: vi.fn(),
+  getProfile: vi.fn(),
+  getPractice: vi.fn(),
+  exportPracticeData: vi.fn(async () => ({ version: 1, handle: 'myHandle', ledger: { version: 1, events: [] } })),
+  recordPracticeFeedback: vi.fn(),
+  subscribeToChanges: vi.fn(),
+}));
 vi.mock('../../services/extensionClient', () => client);
 vi.mock('../content.css', () => ({ default: ':host{all:initial}' }));
 import { startCFChart } from '../controller';
@@ -85,22 +95,54 @@ describe('in-page content integration', () => {
     expect(client.getPractice).not.toHaveBeenCalledWith('randomAuthor');
     expect(shadow('cfchart-personal-host').textContent).toContain('Set up CFChart');
   });
-  it('rechecks solved history explicitly and removes recommendations until full coverage returns', async () => {
-    client.getPractice.mockImplementation(async (_handle: string, options?: { resetHistory?: boolean }) => options?.resetHistory ? { ...practice, coverage: { complete: false, loaded: 1000 }, recommendations: [] } : { ...practice, recommendations: [{ contestId: 1, index: 'A', name: 'Suggested fixture', rating: 1200, tags: [], type: 'warmup', slot: 'core', slotLabel: 'Core', pSolve: 0.5, reasons: ['Test reason'], qualityScore: 1, url: '/problemset/problem/1/A' }] });
+  it('does not render manual recheck notices and displays recommendations', async () => {
+    client.getPractice.mockResolvedValue({
+      ...practice,
+      recommendations: [{
+        contestId: 1, index: 'A', name: 'Suggested fixture', rating: 1200, tags: [],
+        slot: 'core', slotLabel: 'Core', pSolve: null, plannedMinutes: 30, reasons: ['Test reason'],
+        qualityScore: 1, url: 'https://codeforces.com/problemset/problem/1/A'
+      }],
+    });
     await start();
     await act(async () => { shadow('cfchart-personal-host').querySelector<HTMLButtonElement>('.cf-habit-pill')!.click(); });
     const personal = shadow('cfchart-personal-host');
     expect(personal.textContent).toContain('Suggested fixture');
-    await act(async () => { Array.from(personal.querySelectorAll('button')).find(button => button.textContent === 'Recheck solved history')!.click(); });
-    await flush();
-    expect(client.getPractice).toHaveBeenCalledWith('myHandle', { force: true, syncMore: false, resetHistory: true });
-    expect(personal.textContent).not.toContain('Suggested fixture');
-    expect(personal.textContent).toContain('1,000 submissions synced');
+    expect(personal.textContent).not.toContain('Older verdicts may change after a rejudge');
+    expect(personal.textContent).not.toContain('Recheck solved history');
   });
   it('remounts exactly once after reinjection', async () => {
     await start(); await start();
     expect(document.querySelectorAll('#cfchart-profile-host')).toHaveLength(1);
     expect(document.querySelectorAll('#cfchart-personal-host')).toHaveLength(1);
     expect(nativeGraph().style.display).toBe('none');
+  });
+  it('renders Solved and Solved with help options on an accepted problem page', async () => {
+    history.replaceState({}, '', '/problemset/problem/1000/A');
+    document.body.innerHTML = `
+      <div id="header"><div class="lang-chooser"><a href="/profile/myHandle">myHandle</a><a href="/logout">Logout</a></div></div>
+      <div id="pageContent">
+        <div class="problem-statement">
+          <div class="header">
+            <div class="title">A. Test Problem</div>
+          </div>
+        </div>
+        <span class="verdict-accepted">Accepted</span>
+      </div>
+    `;
+    await start();
+    const problemHost = document.getElementById('cfchart-problem-host');
+    expect(problemHost).not.toBeNull();
+    const shadowEl = problemHost!.shadowRoot!;
+    expect(shadowEl.textContent).toContain('Solved');
+    expect(shadowEl.textContent).toContain('Solved with help');
+
+    const buttons = Array.from(shadowEl.querySelectorAll('button'));
+    const assistedBtn = buttons.find(b => b.textContent?.includes('Solved with help'))!;
+    await act(async () => { assistedBtn.click(); });
+    expect(client.recordPracticeFeedback).toHaveBeenCalledWith('myHandle', expect.objectContaining({
+      problemKey: '1000-A',
+      outcome: 'assisted',
+    }));
   });
 });

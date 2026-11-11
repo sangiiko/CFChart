@@ -1,8 +1,12 @@
-import type { CFProblem, CFRatingChange, CFSubmission, CFUser, HabitProgress, PredictionParams, RecommendedProblem } from './codeforces';
+import type { SessionAction } from '../recommender/session';
+import type { PracticeFeedback } from '../recommender/types';
+import type { CFContest, CFProblem, CFRatingChange, CFSubmission, CFUser, HabitProgress, PredictionParams, RecommendedProblem } from './codeforces';
 
 export interface Preferences {
   personalHandle: string | null;
   dailyTarget: number;
+  practiceMinutes?: number;
+  practiceMode?: 'adaptive' | 'timed' | 'guided' | 'transfer';
   predictionParams: PredictionParams;
   chartView: 'enhanced' | 'original';
 }
@@ -47,12 +51,18 @@ export interface CachedPractice {
 }
 
 export interface CachedCatalog {
+  version?: 2;
+  contests?: CFContest[];
   problems: CFProblem[];
   updatedAt: number;
 }
 
 export type RequestOptions = { force?: boolean; syncMore?: boolean; resetHistory?: boolean };
 export type ExtensionRequest =
+  | { type: 'CFCHART_REQUEST'; action: 'recordPracticeFeedback'; handle: string; feedback: PracticeFeedback }
+  | { type: 'CFCHART_REQUEST'; action: 'exportPracticeData'; handle: string }
+  | { type: 'CFCHART_REQUEST'; action: 'clearPracticeData'; handle: string }
+  | { type: 'CFCHART_REQUEST'; action: 'practiceSession'; handle: string; key: string; event?: { id: string; action: SessionAction } }
   | { type: 'CFCHART_REQUEST'; action: 'getPreferences' }
   | { type: 'CFCHART_REQUEST'; action: 'updatePreferences'; preferences: Partial<Preferences> }
   | { type: 'CFCHART_REQUEST'; action: 'detectViewer'; handle: string }

@@ -1,3 +1,5 @@
+import type { SessionAction, SessionState } from '../recommender/session';
+import type { PracticeFeedback } from '../recommender/types';
 import type { ExtensionRequest, ExtensionResponse, Preferences, PracticeSnapshot, ProfileSnapshot, RequestOptions } from '../types/app';
 import { getExtensionApi } from './storage';
 
@@ -37,3 +39,9 @@ export function subscribeToChanges(callback: () => void): () => void {
   api.storage.onChanged.addListener(listener);
   return () => api.storage.onChanged.removeListener(listener);
 }
+
+export const recordPracticeFeedback = (handle: string, feedback: PracticeFeedback) => request<void>({ type: 'CFCHART_REQUEST', action: 'recordPracticeFeedback', handle, feedback });
+export const exportPracticeData = (handle: string) => request<unknown>({ type: 'CFCHART_REQUEST', action: 'exportPracticeData', handle });
+export const clearPracticeData = (handle: string) => request<void>({ type: 'CFCHART_REQUEST', action: 'clearPracticeData', handle });
+
+export const practiceSession = (handle: string, key: string, event?: { id: string; action: SessionAction }) => request<SessionState | null>({ type: 'CFCHART_REQUEST', action: 'practiceSession', handle, key, event });

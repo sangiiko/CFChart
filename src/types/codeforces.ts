@@ -126,7 +126,7 @@ export interface MilestoneTarget {
   achieved: boolean;
 }
 
-export type RecSlot = 'upsolve' | 'core' | 'stretch' | 'warmup' | 'revisit';
+export type RecSlot = 'timed' | 'guided' | 'transfer' | 'upsolve' | 'core' | 'stretch' | 'warmup' | 'revisit';
 
 export interface RecommendedProblem {
   contestId: number;
@@ -134,10 +134,10 @@ export interface RecommendedProblem {
   name: string;
   rating: number;
   tags: string[];
-  type: 'warmup' | 'challenge'; // kept for backward compatibility
   slot: RecSlot;
   slotLabel: string;
-  pSolve: number; // e.g. 0.62 (62%)
+  pSolve: number | null; // Unavailable until a calibrated model passes evaluation.
+  plannedMinutes: number;
   reasons: string[]; // e.g. ["Targeting weak topic: graphs", "Recent uncompleted contest problem"]
   qualityScore: number;
   url: string;

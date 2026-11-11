@@ -42,4 +42,11 @@ delete chromeManifest.browser_specific_settings;
 chromeManifest.background = { service_worker: 'background.js' };
 writeFileSync('dist-chrome/manifest.json', JSON.stringify(chromeManifest, null, 2));
 
-console.log('\nCFChart is ready.\n- For Firefox: Load dist/manifest.json in about:debugging\n- For Chrome / Brave / Edge: Load dist-chrome/ as Unpacked Extension in chrome://extensions');
+// Package Firefox .xpi
+try {
+  execFileSync('zip', ['-r', '-FS', '-q', resolve('cfchart.xpi'), '.'], { cwd: resolve('dist'), stdio: 'inherit' });
+} catch (error) {
+  console.warn('Could not create cfchart.xpi:', error.message);
+}
+
+console.log('\nCFChart is ready.\n- For Firefox: Load dist/manifest.json in about:debugging or install cfchart.xpi\n- For Chrome / Brave / Edge: Load dist-chrome/ as Unpacked Extension in chrome://extensions');

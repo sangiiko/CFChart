@@ -1,3 +1,4 @@
+import { PracticeRecommendations } from '../../components/PracticeRecommendations';
 import type { RequestOptions } from '../../types/app';
 import React, { useEffect, useRef, useState } from 'react';
 import { getPreferences, getProfile, getPractice, subscribeToChanges } from '../../services/extensionClient';
@@ -31,7 +32,7 @@ export const TopBarHabitPill: React.FC<Props> = ({ preferences, onPreferencesCha
     const options = requestedOptions.current; requestedOptions.current = { force: false, syncMore: false };
     getPractice(handle, options).then(value => { if (active) setPractice(value); }).catch(reason => { if (active) setError(reason instanceof Error ? reason.message : 'Practice data could not be loaded.'); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [handle, preferences.dailyTarget, revision]);
+  }, [handle, preferences.dailyTarget, preferences.practiceMinutes, preferences.practiceMode, revision]);
   useEffect(() => {
     if (!handle) return;
     let active = true;
@@ -75,14 +76,16 @@ export const TopBarHabitPill: React.FC<Props> = ({ preferences, onPreferencesCha
         {progress && <>
           <div className="cf-daily-status"><strong>{progress.todayCount}{todayUnknown ? '+' : ''}<span> / {progress.dailyTarget}</span></strong><div>{progress.isTodayTargetMet ? 'Daily goal complete' : `${Math.max(0, progress.dailyTarget - progress.todayCount)} more to reach your goal`}<small>{progress.currentStreak}{progress.streakIsLowerBound ? '+' : ''} day streak{progress.historyComplete === false ? ' · history still syncing' : ''}</small></div></div>
           <progress className="cf-progress" value={Math.min(progress.todayCount, progress.dailyTarget)} max={progress.dailyTarget} aria-label="Daily problem goal" />
-          <div className="cf-goal-row"><label>Daily goal <select aria-label="Daily problem goal" value={preferences.dailyTarget} onChange={event => onPreferencesChange({ dailyTarget: Number(event.target.value) }).catch(reason => setError(String(reason)))}>{[1, 2, 3, 4, 5].map(target => <option key={target} value={target}>{target} problem{target > 1 ? 's' : ''}</option>)}</select></label><span className="cf-muted">Your local day</span></div>
+          <div className="cf-goal-row"><label>Daily goal <select aria-label="Daily problem goal" value={preferences.dailyTarget} onChange={async event => { const target = Number(event.target.value); try { await onPreferencesChange({ dailyTarget: target, practiceMinutes: target <= 2 ? 60 : target * 35 }); refresh(); } catch (reason) { setError(String(reason)); } }}>{[1, 2, 3, 4, 5].map(target => <option key={target} value={target}>{target} problem{target > 1 ? 's' : ''}</option>)}</select></label><span className="cf-muted">Your local day</span></div>
           <div className="cf-heatmap" aria-label="Last 30 days of practice">{progress.recentDays.map(day => <span key={day.dateStr} className={day.unknown ? 'is-unknown' : day.targetMet ? 'is-met' : day.solvedCount > 0 ? 'is-some' : ''} title={`${day.dateStr}: ${day.unknown ? 'not synced yet' : `${day.solvedCount} unique problems`}`} />)}</div>
           <div className="cf-heatmap-caption"><span>30 days</span><span>Empty · partial · goal met</span></div>
           {progress.todayProblems.length > 0 && <div className="cf-problem-list"><h3>Solved today</h3>{progress.todayProblems.map(problem => <a key={problem.key} href={problem.url}><span>{problem.contestId}{problem.index} · {problem.name}</span><span className="cf-solved-check">✓</span></a>)}</div>}
           {current?.error && <p className="cf-notice" role="status">{current.error} Showing saved data.</p>}
-          {current && !current.coverage.complete && <div className="cf-notice"><p>{current.coverage.loaded.toLocaleString()} submissions synced. Older activity is still unknown. Recommendations are live based on current history.</p><button type="button" className="cf-link" disabled={loading} onClick={() => refresh(true)}>{loading ? 'Syncing…' : 'Sync more history'}</button></div>}
-          {current?.coverage.complete && <div className="cf-notice"><p>Older verdicts may change after a rejudge.{current.coverage.lastFullSyncAt ? ` Full history checked ${new Date(current.coverage.lastFullSyncAt).toLocaleDateString()}.` : ''}</p><button type="button" className="cf-link" disabled={loading} onClick={() => refresh(false, true)}>Recheck solved history</button></div>}
-          {!loading && !!current?.recommendations.length && <div className="cf-problem-list"><h3>Try next <span>Unsolved practice</span></h3>{current.recommendations.map(problem => <a key={problem.url} href={problem.url} title={(problem.reasons ?? []).join(' · ')}><span><small className={`cf-slot cf-slot--${problem.slot}`}>{problem.slotLabel} · {Math.round(problem.pSolve * 100)}% · {problem.rating}</small>{problem.contestId}{problem.index} · {problem.name}</span><span aria-hidden="true">↗</span></a>)}</div>}
+          {current && !current.coverage.complete && <div className="cf-notice"><p>{current.coverage.loaded.toLocaleString()} submissions synced. Older activity is still unknown. Recommendations appear once the full solved history is checked.</p><button type="button" className="cf-link" disabled={loading} onClick={() => refresh(true)}>{loading ? 'Syncing…' : 'Sync more history'}</button></div>}
+          {current?.coverage.complete && <>
+            <label className="practice-budget">Practice mode <select value={preferences.practiceMode ?? 'adaptive'} onChange={event => onPreferencesChange({ practiceMode: event.target.value as Preferences['practiceMode'] }).catch(reason => setError(String(reason)))}><option value="adaptive">Adaptive</option><option value="timed">Timed mixed</option><option value="guided">Guided study</option><option value="transfer">Transfer probes</option></select></label>
+            <PracticeRecommendations key={handle} handle={handle} recommendations={current.recommendations} />
+          </>}
         </>}
         <div className="cf-popover-footer"><a href={`/profile/${encodeURIComponent(handle)}`}>View your rating chart ↗</a><button type="button" className="cf-link" disabled={loading} onClick={() => refresh()}>{loading ? 'Refreshing…' : 'Refresh'}</button></div><div className="cf-personal-footer"><button type="button" className="cf-link" onClick={() => { setInput(handle); setSettingHandle(true); }}>Change handle</button>{current && <span>{current.stale ? 'Cached · ' : ''}{new Date(current.updatedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</span>}</div>
       </>}

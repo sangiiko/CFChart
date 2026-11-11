@@ -63,3 +63,27 @@ export function preserveNativeGraph(element: HTMLElement) {
     },
   };
 }
+
+export function parseProblemPath(pathname: string): { contestId: number; index: string } | null {
+  const match = pathname.match(/(?:problemset\/problem|contest|gym)\/(\d+)\/problem\/([a-zA-Z0-9]+)/i)
+    || pathname.match(/\/problemset\/problem\/(\d+)\/([a-zA-Z0-9]+)/i);
+  if (!match) return null;
+  return { contestId: Number(match[1]), index: match[2].toUpperCase() };
+}
+
+export function problemHeaderAnchor(document: Document): HTMLElement | null {
+  return document.querySelector<HTMLElement>('.problem-statement .header .title')
+    || document.querySelector<HTMLElement>('.problem-statement .header');
+}
+
+export function hasAcceptedVerdictInPage(document: Document): boolean {
+  if (document.querySelector('.verdict-accepted, span.verdict-accepted')) return true;
+  const content = document.querySelector('#pageContent');
+  if (content) {
+    const verdictElements = content.querySelectorAll('span.verdict-accepted, td.status-verdict-cell, td.status-cell');
+    for (const el of verdictElements) {
+      if (el.textContent?.includes('Accepted')) return true;
+    }
+  }
+  return false;
+}

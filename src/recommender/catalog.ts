@@ -1,33 +1,16 @@
 import type { CFProblem, CFContest } from '../types/codeforces';
-import { EnrichedProblem } from './types';
+import type { EnrichedProblem } from './types';
+import { problemKey } from './state';
 
 export function enrichCatalog(problems: CFProblem[], contests: CFContest[]): EnrichedProblem[] {
   const contestMap = new Map(contests.map(c => [c.id, c]));
-  
-  return problems.map(problem => {
-    const contest = problem.contestId ? contestMap.get(problem.contestId) : undefined;
-    const isModern = (contest?.startTimeSeconds ?? 0) > 1451606400; // 2016-01-01
-    
-    // Quality scoring
-    let qualityScore = 1.0;
-    
-    // Filter out known junk/special
-    if (problem.tags.includes('*special') || 
-        contest?.name.toLowerCase().includes('april fools') ||
-        contest?.name.toLowerCase().includes('kotlin')) {
-      qualityScore *= 0.1;
-    }
-
-    // Boost modern rounds
-    if (isModern) qualityScore *= 1.2;
-
-    return {
-      ...problem,
-      solvedCount: problem.solvedCount ?? 0,
-      contestType: contest?.type,
-      contestPhase: contest?.phase,
-      isModern,
-      qualityScore
-    };
-  }).filter(p => p.qualityScore > 0.5);
+  return [...new Map(problems.filter(p => Number.isInteger(p.contestId) && p.contestId! > 0
+    && /^[A-Za-z0-9_]+$/.test(p.index) && Number.isFinite(p.rating) && Array.isArray(p.tags))
+    .map(p => [problemKey(p), p])).values()].flatMap(problem => {
+    const contest = contestMap.get(problem.contestId!);
+    if (problem.tags.includes('*special') || /april fools/i.test(contest?.name ?? '')
+      || (contest && contest.phase !== 'FINISHED')) return [];
+    return [{ ...problem, solvedCount: problem.solvedCount ?? 0, contestType: contest?.type,
+      contestPhase: contest?.phase, contestStart: contest?.startTimeSeconds, qualityScore: 1 }];
+  });
 }

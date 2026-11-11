@@ -85,3 +85,14 @@ ml/                Offline collection, training, evaluation, and documentation
 public/            Manifest and extension icons
 scripts/build.js   Clean, validated dist/ packaging
 ```
+
+
+### Adaptive practice plans
+
+The practice panel now plans within a daily time allowance (20–240 minutes) and problem goal. It excludes known solves and unsuitable difficulty, uses absolute Codeforces links, and keeps eligible assigned tasks stable during the local day. A short eligible pool produces a shorter plan. Full solved-history coverage is required.
+
+Record an independent solve, assisted solve, timeout, interruption, skip, or previously solved task, optionally with active minutes. API acceptances alone do not establish independent mastery. At least three distinct timed feedback episodes are needed for a conservative practice-difficulty adjustment. The planner can prioritize attainable recent contest upsolves and independent review three days after a reported assisted solve. This review interval and the 20/30/40-minute allowances are starting heuristics, not calibrated predictions.
+
+Skipping replaces a task when the remaining budget permits; completed and timed-out assignments consume their reserved allowance. Minutes reported above that allowance also count. Plans and feedback stay local and can be exported or deleted in the practice panel. No research telemetry is enabled. Solve probabilities and predicted learning gains remain unavailable pending validation.
+
+Implementation status and research gates: [recommender optimization plan](RECOMMENDER_OPTIMIZATION_PLAN.md).

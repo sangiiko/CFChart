@@ -45,6 +45,16 @@ async function refreshHabitStatus(force = false) {
 async function handleRequest(message: ExtensionRequest): Promise<ExtensionResponse> {
   try {
     switch (message.action) {
+      case 'recordPracticeFeedback':
+        await dataBroker.recordPracticeFeedback(message.handle, message.feedback);
+        return { ok: true, data: undefined };
+      case 'exportPracticeData':
+        return { ok: true, data: await dataBroker.exportPracticeData(message.handle) };
+      case 'clearPracticeData':
+        await dataBroker.clearPracticeData(message.handle);
+        return { ok: true, data: undefined };
+      case 'practiceSession':
+        return { ok: true, data: await dataBroker.practiceSession(message.handle, message.key, message.event) };
       case 'getPreferences':
         return { ok: true, data: await dataBroker.getPreferences() };
       case 'updatePreferences': {

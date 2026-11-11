@@ -145,6 +145,7 @@ export function createCodeforcesApi(options: ApiOptions = {}) {
       }
       return submissions.map(submission => ({
         id: submission.id,
+        contestId: submission.contestId,
         creationTimeSeconds: submission.creationTimeSeconds,
         verdict: submission.verdict,
         problem: {

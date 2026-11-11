@@ -1,9 +1,11 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
 import { createRoot, Root } from 'react-dom/client';
-import { getPreferences, updatePreferences, detectViewer, subscribeToChanges } from '../services/extensionClient';
+import { getPreferences, updatePreferences, detectViewer, subscribeToChanges, getPractice, exportPracticeData } from '../services/extensionClient';
 import { TopBarHabitPill } from './components/TopBarHabitPill';
 import { ProfileHorizonCard } from './components/ProfileHorizonCard';
-import { headerAnchor, profileAnchor, profileHandle, ratingGraph, preserveNativeGraph, viewerHandle } from './dom';
+import { ProblemVerdictBar } from './components/ProblemVerdictBar';
+import { headerAnchor, profileAnchor, profileHandle, ratingGraph, preserveNativeGraph, viewerHandle, parseProblemPath, problemHeaderAnchor, hasAcceptedVerdictInPage } from './dom';
+import type { PracticeLedger } from '../recommender/types';
 import contentStyles from './content.css';
 
 type Preferences = Awaited<ReturnType<typeof getPreferences>>;
@@ -25,9 +27,9 @@ function createMount(id: string): Mount {
 declare global { interface Window { __cfchartDispose?: () => void } }
 export function startCFChart() {
   window.__cfchartDispose?.();
-  let disposed = false, preferences: Preferences | null = null, header: Mount | null = null, profile: Mount | null = null;
+  let disposed = false, preferences: Preferences | null = null, header: Mount | null = null, profile: Mount | null = null, problemBar: Mount | null = null;
   let native: ReturnType<typeof preserveNativeGraph> | null = null;
-  let observedHandle: string | null = null, pending = 0;
+  let observedHandle: string | null = null, observedProblemKey: string | null = null, observedProblemHandle: string | null = null, pending = 0;
   let viewerChecked = false;
   const showNative = (visible: boolean) => {
     if (!native) {
@@ -37,6 +39,13 @@ export function startCFChart() {
     native?.setVisible(visible);
   };
   const removeProfile = () => { native?.restore(); native = null; profile?.root.unmount(); profile?.host.remove(); profile = null; observedHandle = null; };
+  const removeProblemBar = () => {
+    problemBar?.root.unmount();
+    problemBar?.host.remove();
+    problemBar = null;
+    observedProblemKey = null;
+    observedProblemHandle = null;
+  };
   const savePreferences = async (changes: Partial<Preferences>) => {
     const saved = await updatePreferences(changes); if (disposed) return;
     preferences = saved; render();
@@ -56,23 +65,85 @@ export function startCFChart() {
       if (viewer) { viewerChecked = true; detectViewer(viewer).then(value => { if (!disposed && JSON.stringify(value) !== JSON.stringify(preferences)) { preferences = value; render(); } }).catch(() => { /* Manual setup remains available. */ }); }
     }
     const handle = profileHandle(location.pathname);
-    if (!handle) { if (profile) removeProfile(); return; }
-    if (observedHandle && observedHandle !== handle) removeProfile();
-    const graph = ratingGraph(document);
-    if (graph !== native?.element) { native?.restore(); native = graph ? preserveNativeGraph(graph) : null; }
-    const fallback = profileAnchor(document);
-    if (!graph && !fallback) return;
-    if (!profile || !profile.host.isConnected) {
-      profile?.root.unmount(); profile?.host.remove(); profile = createMount('cfchart-profile-host'); observedHandle = handle;
+    if (!handle) {
+      if (profile) removeProfile();
+    } else {
+      if (observedHandle && observedHandle !== handle) removeProfile();
+      const graph = ratingGraph(document);
+      if (graph !== native?.element) { native?.restore(); native = graph ? preserveNativeGraph(graph) : null; }
+      const fallback = profileAnchor(document);
+      if (graph || fallback) {
+        if (!profile || !profile.host.isConnected) {
+          profile?.root.unmount(); profile?.host.remove(); profile = createMount('cfchart-profile-host'); observedHandle = handle;
+        }
+        if (graph?.parentElement) {
+          if (profile.host.nextElementSibling !== graph) graph.parentElement.insertBefore(profile.host, graph);
+        } else if (fallback?.parentElement) {
+          // An unrated profile can have no graph; place after its actual profile box.
+          if (fallback.classList.contains('userbox')) { if (fallback.nextElementSibling !== profile.host) fallback.after(profile.host); }
+          else if (profile.host.parentElement !== fallback) fallback.prepend(profile.host);
+        }
+        profile.root.render(<RenderBoundary key={handle} onFailure={() => showNative(true)}><ProfileHorizonCard handle={handle} onNativeVisibilityChange={native?.setVisible ?? showNative} /></RenderBoundary>);
+      }
     }
-    if (graph?.parentElement) {
-      if (profile.host.nextElementSibling !== graph) graph.parentElement.insertBefore(profile.host, graph);
-    } else if (fallback?.parentElement) {
-      // An unrated profile can have no graph; place after its actual profile box.
-      if (fallback.classList.contains('userbox')) { if (fallback.nextElementSibling !== profile.host) fallback.after(profile.host); }
-      else if (profile.host.parentElement !== fallback) fallback.prepend(profile.host);
+
+    const problemInfo = parseProblemPath(location.pathname);
+    if (problemInfo && preferences.personalHandle) {
+      const userHandle = preferences.personalHandle;
+      const problemKeyStr = `${problemInfo.contestId}-${problemInfo.index}`;
+      if (observedProblemKey === problemKeyStr && observedProblemHandle === userHandle && problemBar?.host.isConnected) {
+        return;
+      }
+      const isPageAccepted = hasAcceptedVerdictInPage(document);
+      Promise.all([
+        getPractice(userHandle).catch(() => null),
+        (exportPracticeData(userHandle) as Promise<{ ledger?: PracticeLedger } | null>).catch(() => null),
+      ]).then(([practice, data]) => {
+        if (disposed) return;
+        const isHistoryAccepted = practice?.submissions.some(
+          s => s.verdict === 'OK' && s.problem?.contestId === problemInfo.contestId && s.problem?.index?.toUpperCase() === problemInfo.index
+        );
+        const isAccepted = isPageAccepted || Boolean(isHistoryAccepted);
+        if (!isAccepted) {
+          removeProblemBar();
+          return;
+        }
+        const existingEvent = data?.ledger?.events?.find(
+          e => e.problemKey === problemKeyStr && e.provenance === 'self-report'
+        );
+        const initialOutcome = existingEvent?.outcome === 'assisted' ? 'assisted' : existingEvent?.outcome === 'independent' ? 'independent' : null;
+        const anchor = problemHeaderAnchor(document);
+        if (!anchor) {
+          removeProblemBar();
+          return;
+        }
+        if (!problemBar || !problemBar.host.isConnected || observedProblemKey !== problemKeyStr) {
+          problemBar?.root.unmount();
+          problemBar?.host.remove();
+          problemBar = createMount('cfchart-problem-host');
+          problemBar.host.style.cssText = 'display:block;margin:6px 0;text-align:left;';
+          if (anchor.classList.contains('title')) {
+            anchor.after(problemBar.host);
+          } else {
+            anchor.append(problemBar.host);
+          }
+          observedProblemKey = problemKeyStr;
+          observedProblemHandle = userHandle;
+        }
+        problemBar.root.render(
+          <RenderBoundary>
+            <ProblemVerdictBar
+              handle={userHandle}
+              contestId={problemInfo.contestId}
+              index={problemInfo.index}
+              initialOutcome={initialOutcome}
+            />
+          </RenderBoundary>
+        );
+      });
+    } else {
+      removeProblemBar();
     }
-    profile.root.render(<RenderBoundary key={handle} onFailure={() => showNative(true)}><ProfileHorizonCard handle={handle} onNativeVisibilityChange={native?.setVisible ?? showNative} /></RenderBoundary>);
   };
   const schedule = () => { if (!pending && !disposed) pending = window.setTimeout(() => { pending = 0; render(); }, 80); };
   const observer = new MutationObserver(schedule);
@@ -95,7 +166,7 @@ export function startCFChart() {
     if (disposed) return; disposed = true;
     observer.disconnect(); window.clearTimeout(stopObserving); window.clearTimeout(pending);
     window.removeEventListener('popstate', schedule); unsubscribe();
-    header?.root.unmount(); header?.host.remove(); removeProfile();
+    header?.root.unmount(); header?.host.remove(); removeProfile(); removeProblemBar();
     if (window.__cfchartDispose === dispose) delete window.__cfchartDispose;
   };
   window.__cfchartDispose = dispose;

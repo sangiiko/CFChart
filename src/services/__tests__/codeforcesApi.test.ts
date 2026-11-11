@@ -1,3 +1,4 @@
+import { buildPracticeState } from '../../recommender/state';
 import { describe, expect, it, vi } from 'vitest';
 import { CodeforcesApiError, createCodeforcesApi, getProblemUrl, getRankTier, REQUEST_INTERVAL_MS } from '../codeforcesApi';
 
@@ -54,4 +55,18 @@ describe('Codeforces display helpers', () => {
     expect(getRankTier(undefined).name).toBe('Unrated');
     expect(getProblemUrl(100001, 'A')).toBe('https://codeforces.com/gym/100001/problem/A');
   });
+});
+
+
+it('preserves unrated contest participation through submission normalization', async () => {
+  const api = createCodeforcesApi({ wait: async () => {}, fetch: vi.fn(async () => response([{
+    id: 1, contestId: 42, creationTimeSeconds: 100, verdict: 'WRONG_ANSWER',
+    problem: { contestId: 42, index: 'A', name: 'Task', tags: [] },
+    author: { participantType: 'CONTESTANT', members: [{ handle: 'alice' }] },
+  }])) as typeof fetch });
+  const submissions = await api.fetchSubmissionPage('alice');
+  expect(submissions[0].contestId).toBe(42);
+  expect(buildPracticeState(submissions, [], 1400, true, [], 200000).participatedContests.has(42)).toBe(true);
+  const legacy = submissions.map(({ contestId: _contestId, ...submission }) => submission);
+  expect(buildPracticeState(legacy, [], 1400, true, [], 200000).participatedContests.has(42)).toBe(true);
 });

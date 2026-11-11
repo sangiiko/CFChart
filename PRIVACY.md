@@ -9,7 +9,7 @@ Your privacy is a core priority. This privacy policy explains what information C
 ---
 
 ### 1. Information We Collect
-CFChart **does not collect, log, or transmit any personal information**. We do not operate tracking servers, telemetry services, analytics engines, or external databases.
+CFChart does not transmit practice records to us. We do not operate tracking servers, telemetry services, analytics engines, or external databases. The extension stores your selected handle, public API caches, and optional practice feedback locally on your device.
 
 ### 2. How Data is Accessed and Handled
 * **Public Codeforces Data:** To display rating charts, track daily problem goals, and suggest practice problems, CFChart directly queries the official, public Codeforces API (`codeforces.com/api`) for:
@@ -23,12 +23,13 @@ CFChart **does not collect, log, or transmit any personal information**. We do n
 All data handled by CFChart is stored **strictly locally** on your device using the browser's native `storage.local` API:
 * Your chosen Codeforces handle and daily problem target
 * Local caches of public contest ratings and submission history to minimize network requests
-* Local caching of the public problem catalog
+* Local caching of the public problem catalog and contest metadata
+* Your practice time budget, assigned plans, and optional self-reported outcomes, assistance, active minutes, and timestamps
 
-This data never leaves your computer and can be cleared at any time by uninstalling the extension or clearing extension data in your browser settings.
+CFChart does not automatically upload this stored data. You can export your local practice records as a JSON file; the export includes your handle, so review it before sharing. The practice panel can delete local plans and feedback for the selected handle. Public API caches and settings remain until you clear extension data or uninstall the extension.
 
 ### 4. Local Machine Learning Inference
-All machine learning rating forecasts and problem recommendation scoring logic run **100% locally in your browser** via native TypeScript decision tree traversal and scoring algorithms. No user data, submissions, or queries are ever sent to remote AI inference servers.
+Rating forecasts and recommendation logic run locally in your browser. The practice planner currently uses a transparent adaptive heuristic with conservative adjustments from explicit timed feedback. It does not claim calibrated solve probabilities or proven rating gains. No user data, submissions, or queries are ever sent to remote AI inference servers.
 
 ### 5. Third-Party Services
 CFChart communicates exclusively with official Codeforces endpoints (`*.codeforces.com`, `*.codeforces.net`, `*.codeforces.org`) as required to retrieve public competitive programming data. CFChart does not include third-party advertising, trackers, or marketing SDKs.

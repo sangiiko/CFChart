@@ -1,5 +1,6 @@
 import type { CFSubmission, HabitProgress, SolvedProblemSummary, HabitDaySummary } from '../types/codeforces';
 import type { HistoryCoverage } from '../types/app';
+import type { PracticeEvent } from '../recommender/types';
 import { getProblemKey, getProblemUrl } from './codeforcesApi';
 import { format, subDays } from 'date-fns';
 
@@ -9,6 +10,7 @@ export function calculateHabitProgress(
   dailyTarget = 2,
   referenceDate = new Date(),
   coverage: HistoryCoverage = { complete: true, loaded: submissions.length },
+  events: PracticeEvent[] = [],
 ): HabitProgress {
   dailyTarget = Number.isFinite(dailyTarget) ? Math.max(1, Math.floor(dailyTarget)) : 2;
   const solvedByDate = new Map<string, Map<string, SolvedProblemSummary>>();
@@ -29,6 +31,26 @@ export function calculateHabitProgress(
         key, name: sub.problem.name, contestId: sub.problem.contestId, index: sub.problem.index,
         rating: sub.problem.rating, timestamp: sub.creationTimeSeconds * 1000,
         url: getProblemUrl(sub.problem.contestId, sub.problem.index),
+      });
+    }
+  }
+
+  for (const event of events) {
+    if (event.timestamp > referenceDate.getTime()) continue;
+    if (!['accepted', 'independent', 'assisted'].includes(event.outcome)) continue;
+    const dateStr = format(new Date(event.timestamp), 'yyyy-MM-dd');
+    if (!solvedByDate.has(dateStr)) solvedByDate.set(dateStr, new Map());
+    const dayMap = solvedByDate.get(dateStr)!;
+    const previous = dayMap.get(event.problemKey);
+    if (!previous) {
+      dayMap.set(event.problemKey, {
+        key: event.problemKey,
+        name: event.problem?.name ?? event.problemKey,
+        contestId: event.problem?.contestId,
+        index: event.problem?.index ?? '',
+        rating: event.problem?.rating,
+        timestamp: event.timestamp,
+        url: event.problem?.url ?? getProblemUrl(event.problem?.contestId, event.problem?.index ?? ''),
       });
     }
   }
