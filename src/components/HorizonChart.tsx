@@ -1,5 +1,6 @@
 import React from 'react';
 import { ChartDataPoint } from '../types/codeforces';
+import { getRankTier } from '../services/codeforcesApi';
 
 export interface ForecastPoint { timestamp: number; lower: number; median: number; upper: number; horizonDays: number }
 interface HorizonChartProps {
@@ -48,7 +49,48 @@ export const HorizonChart: React.FC<HorizonChartProps> = ({ data, currentRating,
       {history.map((p, i) => <circle key={`${p.timestamp}-${i}`} cx={x(p.timestamp)} cy={y(p.historicalRating!)} r="3.5" fill={p.rankColor || '#2563a6'} stroke="#fff" strokeWidth="1" tabIndex={0}><title>{`${preciseDate(p.timestamp)} · ${p.contestName} · Rating ${p.historicalRating}${p.rank ? ` · Rank ${p.rank}` : ''}`}</title></circle>)}
       {scenario.length > 1 && <path d={path(scenario, 'predictedRating')} stroke="#64748b" strokeWidth="2" strokeDasharray="6 5" fill="none" vectorEffect="non-scaling-stroke" />}
       {scenario.length > 0 && <circle cx={x(scenarioEnd!.timestamp)} cy={y(scenarioEnd!.predictedRating!)} r="4" fill="#64748b"><title>{`Illustrative scenario · ${preciseDate(scenarioEnd!.timestamp)} · ${scenarioEnd!.predictedRating}`}</title></circle>}
-      {forecasts.map(p => <g key={p.horizonDays}><line x1={x(p.timestamp)} x2={x(p.timestamp)} y1={y(p.lower)} y2={y(p.upper)} stroke="#946324" strokeWidth="6" opacity="0.45" /><circle cx={x(p.timestamp)} cy={y(p.median)} r="4" fill="#946324"><title>{`${p.horizonDays}-day forecast · ${p.median} · 85% confidence interval ${p.lower}–${p.upper} (±${Math.round((p.upper - p.lower) / 2)} pts)`}</title></circle></g>)}
+      {history.length > 0 && forecasts.length > 0 && (
+        <path
+          d={`M${x(history[history.length - 1].timestamp).toFixed(2)},${y(history[history.length - 1].historicalRating!).toFixed(2)} ${[...forecasts]
+            .sort((a, b) => a.horizonDays - b.horizonDays)
+            .map(f => `L${x(f.timestamp).toFixed(2)},${y(f.median).toFixed(2)}`)
+            .join(' ')}`}
+          stroke="#64748b"
+          strokeWidth="1.5"
+          strokeDasharray="4 4"
+          fill="none"
+          vectorEffect="non-scaling-stroke"
+        />
+      )}
+      {forecasts.map(p => {
+        const tier = getRankTier(p.median);
+        const tierColor = tier.color || '#2563a6';
+        return (
+          <g key={p.horizonDays}>
+            <line
+              x1={x(p.timestamp)}
+              x2={x(p.timestamp)}
+              y1={y(p.lower)}
+              y2={y(p.upper)}
+              stroke={tierColor}
+              strokeWidth="6"
+              strokeLinecap="round"
+              opacity="0.35"
+            />
+            <circle
+              cx={x(p.timestamp)}
+              cy={y(p.median)}
+              r="4.5"
+              fill={tierColor}
+              stroke="#fff"
+              strokeWidth="1.5"
+              tabIndex={0}
+            >
+              <title>{`${p.horizonDays}-day forecast · ${p.median} (${tier.name}) · 85% confidence interval ${p.lower}–${p.upper} (±${Math.round((p.upper - p.lower) / 2)} pts)`}</title>
+            </circle>
+          </g>
+        );
+      })}
     </svg>
     <div className="cf-chart-legend"><span><i className="cf-history-key" />Official rating</span>{scenario.length > 0 && <span><i className="cf-scenario-key" />Illustrative scenario</span>}{forecasts.length > 0 && <span><i className="cf-forecast-key" />85% confidence forecast</span>}<span className="cf-chart-hint">Hover a contest point for details</span></div>
     <details className="cf-history-table"><summary>Contest history ({history.length})</summary><div className="cf-table-scroll"><table><thead><tr><th>Date</th><th>Contest</th><th>Rank</th><th>Rating</th></tr></thead><tbody>{[...history].reverse().map((p, i) => <tr key={`${p.timestamp}-${i}`}><td>{preciseDate(p.timestamp)}</td><td>{p.contestName}</td><td>{p.rank ?? '—'}</td><td style={{ color: p.rankColor }}>{p.historicalRating}</td></tr>)}</tbody></table></div></details>

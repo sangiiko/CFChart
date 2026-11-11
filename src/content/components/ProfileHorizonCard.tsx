@@ -68,12 +68,14 @@ export const ProfileHorizonCard: React.FC<Props> = ({ handle, onNativeVisibility
         {forecast.available ? <>
           <div className="cf-forecast-grid">
             {forecast.forecasts.map(p => {
+              const tier = getRankTier(p.median);
               const margin = Math.round((p.upper - p.lower) / 2);
               const delta = currentRating != null ? p.median - currentRating : null;
               return <div key={p.horizonDays} className="cf-forecast-card">
                 <div className="cf-forecast-card-title">{p.horizonDays}-Day Horizon</div>
                 <div className="cf-forecast-card-val">
-                  <strong>{p.median}</strong>
+                  <strong style={{ color: tier.color }}>{p.median}</strong>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: tier.color }}>{tier.name}</span>
                   <span className="cf-forecast-margin">±{margin} pts</span>
                 </div>
                 <div className="cf-forecast-range">

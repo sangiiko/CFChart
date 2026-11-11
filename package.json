@@ -1,6 +1,6 @@
 {
   "name": "cfchart-firefox-extension",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "Enhanced in-page Codeforces rating charts, ML rating forecasts, daily practice streaks, and intelligent problem recommendations",
   "private": true,
   "type": "module",
