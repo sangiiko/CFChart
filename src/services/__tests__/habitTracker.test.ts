@@ -65,4 +65,68 @@ describe('habitTracker', () => {
     // Streak from yesterday is 2
     expect(progress.currentStreak).toBe(2);
   });
+
+  it('includes practice events (e.g. self-reports or in-page solves) in daily progress', () => {
+    const today = new Date('2026-11-10T12:00:00Z');
+    const todayMs = today.getTime();
+
+    const progress = calculateHabitProgress(
+      [],
+      2,
+      today,
+      { complete: true, loaded: 0 },
+      [
+        {
+          id: 'event-1',
+          version: 1,
+          problemKey: '100-A',
+          outcome: 'independent',
+          timestamp: todayMs - 1000,
+          provenance: 'self-report',
+          problem: {
+            contestId: 100,
+            index: 'A',
+            name: 'Problem 100A',
+            rating: 1200,
+            tags: [],
+            slot: 'core',
+            slotLabel: 'Practice',
+            pSolve: null,
+            plannedMinutes: 30,
+            reasons: [],
+            qualityScore: 1,
+            url: 'https://codeforces.com/problemset/problem/100/A',
+          },
+        },
+        {
+          id: 'event-2',
+          version: 1,
+          problemKey: '200-B',
+          outcome: 'assisted',
+          timestamp: todayMs - 500,
+          provenance: 'self-report',
+          problem: {
+            contestId: 200,
+            index: 'B',
+            name: 'Problem 200B',
+            rating: 1300,
+            tags: [],
+            slot: 'core',
+            slotLabel: 'Practice',
+            pSolve: null,
+            plannedMinutes: 30,
+            reasons: [],
+            qualityScore: 1,
+            url: 'https://codeforces.com/problemset/problem/200/B',
+          },
+        },
+      ]
+    );
+
+    expect(progress.todayCount).toBe(2);
+    expect(progress.isTodayTargetMet).toBe(true);
+    expect(progress.todayProblems).toHaveLength(2);
+    expect(progress.todayProblems[0].key).toBe('200-B');
+    expect(progress.todayProblems[1].key).toBe('100-A');
+  });
 });
