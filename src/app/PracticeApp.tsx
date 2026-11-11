@@ -55,7 +55,7 @@ export function PracticeApp({ fullPage = false }: { fullPage?: boolean }) {
     setError('');
     try {
       const user = handle ? (await getProfile(handle)).user : null;
-      const prefs = await updatePreferences({ personalHandle: user?.handle ?? null, dailyTarget, practiceMinutes, practiceMode: String(form.get('mode')) as Preferences['practiceMode'] });
+      const prefs = await updatePreferences({ personalHandle: user?.handle ?? null, dailyTarget, practiceMinutes, practiceMode: 'adaptive' });
       setPreferences(prefs);
       setEditing(false);
       setPractice(null);
@@ -88,8 +88,6 @@ export function PracticeApp({ fullPage = false }: { fullPage?: boolean }) {
           <select id="daily-target" name="target" defaultValue={preferences?.dailyTarget ?? 2}>
             {Array.from({ length: 10 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1} {i ? 'problems' : 'problem'} / day</option>)}
           </select>
-          <label htmlFor="practice-mode">Practice mode</label>
-          <select id="practice-mode" name="mode" defaultValue={preferences?.practiceMode ?? 'adaptive'}><option value="adaptive">Adaptive practice</option><option value="timed">Timed mixed practice</option><option value="guided">Guided study</option><option value="transfer">Independent transfer probes</option></select>
           <label htmlFor="practice-minutes">Daily practice time (minutes)</label>
           <input id="practice-minutes" name="minutes" type="number" min="20" max="240" defaultValue={preferences?.practiceMinutes ?? 60} required />
           <p className="muted">Distinct accepted problems per local day. Repeat acceptances count once per day. Browsing other profiles never switches this account.</p>
