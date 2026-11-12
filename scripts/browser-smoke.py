@@ -51,7 +51,7 @@ class FixtureHandler(BaseHTTPRequestHandler):
             #pageContent{width:760px;max-width:100%}.problem-statement{padding:20px;border:1px solid #ddd;margin-top:24px}
             .problem-statement .title{text-align:center;font-size:18px;font-weight:bold}
             </style></head><body><div id="header"><strong style="font-size:28px">Codeforces</strong>
-            <div class="lang-chooser"><a href="/profile/practice_user">practice_user</a></div></div>
+            <div class="lang-chooser"><a href="/profile/practice_user">practice_user</a> | <a href="/logout?session=fixture">Logout</a></div></div>
             <div id="pageContent"><div class="problem-statement"><div class="header"><div class="title">C. Practice problem</div></div>
             <p>Find the answer to the problem.</p><span class="verdict-accepted">Accepted</span></div></div></body></html>'''
             data = html.encode()
@@ -157,6 +157,7 @@ def main():
                 driver.set_window_size(1280, 900)
                 driver.get(origin + '/problemset/problem/2000/C')
                 wait.until(lambda _: shadow("return document.querySelector('#cfchart-problem-host')?.shadowRoot?.querySelector('[data-testid=problem-timer-widget]') != null"))
+                wait.until(lambda _: shadow("return document.querySelector('#cfchart-problem-host')?.shadowRoot?.querySelector('[aria-label=\"Record problem outcome\"]') != null"))
                 assert shadow("return document.querySelector('#cfchart-problem-host').shadowRoot.querySelector('[data-testid=timer-digits]').textContent") == '20:00'
                 driver.save_screenshot(str(args.output / 'timer-expanded.png'))
                 shadow("document.querySelector('#cfchart-problem-host').shadowRoot.querySelector('[aria-label=\"Timer settings\"]').click()")

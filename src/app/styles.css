@@ -89,15 +89,6 @@ progress::-webkit-progress-value{background:var(--cf-blue)}
 .practice-task-open{display:inline-flex;align-items:center;justify-content:center;min-height:38px;margin-top:12px;padding:8px 13px;border:1px solid var(--cf-blue);border-radius:7px;background:var(--cf-blue);color:#fff;font-size:12px;font-weight:700;text-decoration:none}
 .practice-task-open:hover{background:var(--cf-blue-hover);text-decoration:none}
 .practice-task-open span{margin-left:6px}
-.practice-task-outcome{margin-top:10px;border-top:1px solid var(--cf-border);padding-top:9px}
-.practice-task-outcome summary{width:max-content;max-width:100%;padding:5px 2px;color:var(--cf-blue);font-size:12px;font-weight:600;cursor:pointer}
-.practice-task-outcome form{display:grid;gap:10px;margin-top:10px}
-.practice-task-outcome label{display:grid;gap:4px;color:var(--cf-muted);font-size:12px}
-.practice-task-outcome select{width:100%;min-height:36px;padding:6px 8px;border:1px solid var(--cf-control-border);border-radius:6px;background:#fff;color:var(--cf-text)}
-.practice-task-actions{display:flex;align-items:center;gap:8px}
-.practice-task-actions button{min-height:36px;padding:6px 11px;border:1px solid var(--cf-border);border-radius:6px;background:#fff;color:var(--cf-blue);font-size:12px;font-weight:600}
-.practice-task-actions button[type=submit]{border-color:var(--cf-blue);background:var(--cf-blue);color:#fff}
-.practice-task-saved{margin-top:10px;color:var(--cf-green);font-size:12px;font-weight:600}
 .practice-more-button{min-height:36px;padding:6px 2px;border:0;background:transparent;color:var(--cf-blue);font-size:12px;font-weight:600}
 .practice-more-button:hover{text-decoration:underline}
 .practice-session>.cf-empty{padding:18px;border:1px solid var(--cf-border);border-radius:var(--cf-radius);color:var(--cf-muted)}

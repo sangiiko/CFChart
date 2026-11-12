@@ -125,15 +125,6 @@
 .cf-popover .practice-task-reason{color:var(--cf-muted);font-size:12px}
 .cf-popover .practice-task-open{display:inline-flex;align-items:center;justify-content:center;min-height:36px;margin-top:10px;padding:7px 11px;border:1px solid var(--cf-blue);border-radius:6px;background:var(--cf-blue);color:#fff;font-size:12px;font-weight:650;text-decoration:none}
 .cf-popover .practice-task-open:hover{background:var(--cf-blue-hover)}
-.cf-popover .practice-task-outcome{margin-top:10px;border-top:1px solid var(--cf-border);padding-top:8px}
-.cf-popover .practice-task-outcome summary{min-height:28px;padding:4px 0;color:var(--cf-blue);font-size:12px;font-weight:600;cursor:pointer}
-.cf-popover .practice-task-outcome form{display:grid;gap:8px;margin-top:8px}
-.cf-popover .practice-task-outcome label{display:grid;gap:4px;color:var(--cf-muted);font-size:12px}
-.cf-popover .practice-task-outcome select{width:100%;min-height:34px}
-.cf-popover .practice-task-actions{display:flex;gap:8px}
-.cf-popover .practice-task-actions button{min-height:34px;padding:6px 9px;border:1px solid var(--cf-border);border-radius:6px;background:#fff;color:var(--cf-blue);font-size:12px;font-weight:600}
-.cf-popover .practice-task-actions button[type=submit]{border-color:var(--cf-blue);background:var(--cf-blue);color:#fff}
-.cf-popover .practice-task-saved{margin-top:8px;color:var(--cf-green);font-size:12px}
 .cf-popover .practice-more-button{min-height:34px;padding:5px 0;border:0;background:transparent;color:var(--cf-blue);font-size:12px;font-weight:600}
 
 /* Problem outcome aligns with the timer */

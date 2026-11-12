@@ -77,9 +77,9 @@ export function problemHeaderAnchor(document: Document): HTMLElement | null {
 }
 
 export function hasAcceptedVerdictInPage(document: Document): boolean {
-  if (document.querySelector('.verdict-accepted, span.verdict-accepted')) return true;
   const content = document.querySelector('#pageContent');
   if (content) {
+    if (content.querySelector('.verdict-accepted')) return true;
     const verdictElements = content.querySelectorAll('span.verdict-accepted, td.status-verdict-cell, td.status-cell');
     for (const el of verdictElements) {
       if (el.textContent?.includes('Accepted')) return true;

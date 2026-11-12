@@ -1,62 +1,51 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { RecommendedProblem } from '../../types/codeforces';
-const client = vi.hoisted(() => ({ practiceSession: vi.fn(async () => null), recordPracticeFeedback: vi.fn(), exportPracticeData: vi.fn(), clearPracticeData: vi.fn(), subscribeToChanges: vi.fn(() => () => {}) }));
-vi.mock('../../services/extensionClient', () => client);
 import { PracticeRecommendations } from '../PracticeRecommendations';
-const problem: RecommendedProblem = { contestId: 10, index: 'A', name: 'Example', rating: 1400, tags: [], slot: 'core',
-  slotLabel: 'Core practice', pSolve: null, plannedMinutes: 30, reasons: ['Within your practice range.'], qualityScore: 1,
-  url: 'https://codeforces.com/problemset/problem/10/A' };
+
+const problem: RecommendedProblem = {
+  contestId: 10, index: 'A', name: 'Example', rating: 1400, tags: [], slot: 'core',
+  slotLabel: 'Core practice', pSolve: null, plannedMinutes: 30,
+  reasons: ['Within your practice range.'], qualityScore: 1,
+  url: 'https://codeforces.com/problemset/problem/10/A',
+};
 let root: Root;
 let container: HTMLDivElement;
-const button = (text: string) => [...container.querySelectorAll('button')].find(b => b.textContent === text)!;
-beforeEach(async () => {
+
+beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-  vi.clearAllMocks();
-  container = document.createElement('div'); document.body.append(container); root = createRoot(container);
-  await act(async () => root.render(<PracticeRecommendations handle="alice" recommendations={[problem]} budget={60} />));
+  container = document.createElement('div');
+  document.body.append(container);
+  root = createRoot(container);
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); });
 
-describe('practice feedback UI', () => {
-  it('renders correct links and allowances without a fake percentage, and records unknown time honestly', async () => {
+describe('practice recommendation UI', () => {
+  it('offers a problem without outcome controls before acceptance', async () => {
+    await act(async () => root.render(<PracticeRecommendations recommendations={[problem]} />));
     expect(container.querySelector('a')?.href).toBe(problem.url);
     expect(container.textContent).toContain('Core practice');
-    expect(container.textContent).toContain('1400');
-    expect(container.textContent).not.toContain('Practice plan');
-    expect(container.textContent).not.toContain('50%');
-    expect(container.querySelector('details')?.open).toBe(false);
-    await act(async () => (container.querySelector('summary') as HTMLElement).click());
-    expect(container.querySelector('details')?.open).toBe(true);
-    await act(async () => container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
-    expect(client.recordPracticeFeedback).toHaveBeenCalledWith('alice', expect.objectContaining({ outcome: 'independent', problemKey: '10-A' }));
-    expect(client.recordPracticeFeedback.mock.calls[0][1]).not.toHaveProperty('minutes');
-    expect(container.textContent).toContain('Result saved');
+    expect(container.textContent).toContain('Rating 1400');
+    expect(container.textContent).toContain('Within your practice range.');
+    expect(container.querySelector('form, select, .practice-task-outcome')).toBeNull();
+    expect(container.textContent).not.toContain('Record outcome');
   });
-  it('records an assisted outcome and preserves errors for retry', async () => {
-    const select = container.querySelector('select')!;
-    await act(async () => { select.value = 'assisted'; select.dispatchEvent(new Event('change', { bubbles: true })); });
-    client.recordPracticeFeedback.mockRejectedValueOnce(new Error('Storage unavailable'));
-    await act(async () => container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
-    expect(client.recordPracticeFeedback.mock.calls[0][1].outcome).toBe('assisted');
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe('Storage unavailable');
-    expect(button('Save result').disabled).toBe(false);
-  });
-  it('does not render unnecessary export, delete or active minutes inputs', () => {
-    expect(container.textContent).not.toContain('Delete practice data');
-    expect(container.textContent).not.toContain('Export practice data');
-    expect(container.textContent).not.toContain('active minutes');
-    expect(container.textContent).not.toContain('Why this problem');
-    expect(container.textContent).not.toContain('Practice plan');
-    expect(container.textContent).not.toContain('Up to 60 minutes today');
-  });
+
   it('shows one next problem until more choices are requested', async () => {
     const another = { ...problem, contestId: 11, index: 'B', name: 'Another task' };
-    await act(async () => root.render(<PracticeRecommendations handle="alice" recommendations={[problem, another]} />));
+    await act(async () => root.render(<PracticeRecommendations recommendations={[problem, another]} />));
     expect(container.querySelectorAll('.practice-task')).toHaveLength(1);
-    await act(async () => button('See 1 more choices').click());
+    const more = [...container.querySelectorAll('button')].find(button => button.textContent === 'See 1 more choices')!;
+    await act(async () => (more as HTMLButtonElement).click());
     expect(container.querySelectorAll('.practice-task')).toHaveLength(2);
+    expect(container.querySelector('form, select, .practice-task-outcome')).toBeNull();
+  });
+
+  it('explains when no suitable task remains', async () => {
+    await act(async () => root.render(<PracticeRecommendations recommendations={[]} />));
+    expect(container.textContent).toContain('No tasks remain');
+    expect(container.querySelector('.practice-task')).toBeNull();
   });
 });

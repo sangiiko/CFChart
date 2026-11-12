@@ -32,7 +32,7 @@ export function startCFChart() {
   window.__cfchartDispose?.();
   let disposed = false, preferences: Preferences | null = null, header: Mount | null = null, profile: Mount | null = null, problemBar: Mount | null = null;
   let native: ReturnType<typeof preserveNativeGraph> | null = null;
-  let observedHandle: string | null = null, observedProblemKey: string | null = null, pending = 0;
+  let observedHandle: string | null = null, observedProblemKey: string | null = null, pending = 0, problemRequestId = 0;
   let viewerChecked = false;
   const showNative = (visible: boolean) => {
     if (!native) {
@@ -43,6 +43,7 @@ export function startCFChart() {
   };
   const removeProfile = () => { native?.restore(); native = null; profile?.root.unmount(); profile?.host.remove(); profile = null; observedHandle = null; };
   const removeProblemBar = () => {
+    problemRequestId++;
     problemBar?.root.unmount();
     problemBar?.host.remove();
     problemBar = null;
@@ -97,7 +98,11 @@ export function startCFChart() {
       if (!anchor) {
         removeProblemBar();
       } else {
-        const isPageAccepted = hasAcceptedVerdictInPage(document);
+        // A verdict shown in the page belongs to the signed-in account. History is
+        // checked separately for the tracked account when those handles differ.
+        const isPageAccepted = viewerHandle(document)?.toLowerCase() === userHandle.toLowerCase()
+          && hasAcceptedVerdictInPage(document);
+        const requestId = ++problemRequestId;
         const checkAccepted = userHandle
           ? Promise.all([
               getPractice(userHandle).catch(() => null),
@@ -106,7 +111,9 @@ export function startCFChart() {
           : Promise.resolve([null, null] as const);
 
         checkAccepted.then(([practice, data]) => {
-          if (disposed) return;
+          if (disposed || requestId !== problemRequestId) return;
+          const currentProblem = parseProblemPath(location.pathname);
+          if (currentProblem?.contestId !== problemInfo.contestId || currentProblem.index !== problemInfo.index) return;
           const isHistoryAccepted = practice?.submissions.some(
             s => s.verdict === 'OK' && s.problem?.contestId === problemInfo.contestId && s.problem?.index?.toUpperCase() === problemInfo.index
           );
@@ -152,6 +159,20 @@ export function startCFChart() {
   observer.observe(document.documentElement, { childList: true, subtree: true });
   // CF uses full page navigation. A bounded observer handles delayed graph/header construction.
   const stopObserving = window.setTimeout(() => observer.disconnect(), 30_000);
+  // Codeforces can add a submission verdict well after the initial page settles.
+  // Keep watching just the problem content and rerender only when acceptance changes.
+  const problemContent = parseProblemPath(location.pathname) && document.querySelector('#pageContent');
+  let pageAcceptedKnown = hasAcceptedVerdictInPage(document);
+  const verdictObserver = new MutationObserver(() => {
+    const accepted = hasAcceptedVerdictInPage(document);
+    if (accepted !== pageAcceptedKnown) {
+      pageAcceptedKnown = accepted;
+      schedule();
+    }
+  });
+  if (problemContent) verdictObserver.observe(problemContent, {
+    childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class'],
+  });
   window.addEventListener('popstate', schedule);
   const unsubscribe = subscribeToChanges(() => {
     getPreferences().then(value => { if (!disposed && JSON.stringify(value) !== JSON.stringify(preferences)) { preferences = value; render(); } }).catch(() => { /* Visible UI can continue with the last known preferences. */ });
@@ -166,7 +187,7 @@ export function startCFChart() {
   });
   const dispose = () => {
     if (disposed) return; disposed = true;
-    observer.disconnect(); window.clearTimeout(stopObserving); window.clearTimeout(pending);
+    observer.disconnect(); verdictObserver.disconnect(); window.clearTimeout(stopObserving); window.clearTimeout(pending);
     window.removeEventListener('popstate', schedule); unsubscribe();
     header?.root.unmount(); header?.host.remove(); removeProfile(); removeProblemBar();
     if (window.__cfchartDispose === dispose) delete window.__cfchartDispose;

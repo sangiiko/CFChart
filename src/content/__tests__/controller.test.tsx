@@ -173,5 +173,35 @@ describe('in-page content integration', () => {
     const shadowEl = problemHost!.shadowRoot!;
     expect(shadowEl.textContent).toContain('Countdown · 20 min');
     expect(shadowEl.textContent).not.toContain('Solved');
+    expect(shadowEl.querySelector('.cf-problem-verdict-bar')).toBeNull();
+  });
+  it('reveals outcome controls even after the initial page observer stops', async () => {
+    history.replaceState({}, '', '/problemset/problem/2000/C');
+    document.body.innerHTML = '<div id="header"><div class="lang-chooser"><a href="/profile/myHandle">myHandle</a><a href="/logout">Logout</a></div></div><div id="pageContent"><div class="problem-statement"><div class="header"><div class="title">C. Test Problem</div></div></div></div>';
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    const timeoutSpy = vi.spyOn(window, 'setTimeout').mockImplementation((handler, timeout, ...args) =>
+      nativeSetTimeout(handler, timeout === 30_000 ? 0 : timeout, ...args) as unknown as ReturnType<typeof setTimeout>
+    );
+    try { await start(); } finally { timeoutSpy.mockRestore(); }
+    expect(shadow('cfchart-problem-host').querySelector('.cf-problem-verdict-bar')).toBeNull();
+
+    await act(async () => {
+      document.querySelector('#pageContent')!.insertAdjacentHTML('beforeend', '<span class="verdict-accepted">Accepted</span>');
+      await new Promise(resolve => setTimeout(resolve, 120));
+    });
+    expect(shadow('cfchart-problem-host').querySelector('.cf-problem-verdict-bar')).not.toBeNull();
+  });
+  it('does not attribute another signed-in account’s verdict to the tracked account', async () => {
+    history.replaceState({}, '', '/problemset/problem/2000/C');
+    document.body.innerHTML = '<div id="header"><div class="lang-chooser"><a href="/profile/otherHandle">otherHandle</a><a href="/logout">Logout</a></div></div><div id="pageContent"><div class="problem-statement"><div class="header"><div class="title">C. Test Problem</div></div></div><span class="verdict-accepted">Accepted</span></div>';
+    await start();
+    expect(shadow('cfchart-problem-host').querySelector('.cf-problem-verdict-bar')).toBeNull();
+  });
+  it('offers outcome controls for a problem already accepted by the tracked account', async () => {
+    history.replaceState({}, '', '/problemset/problem/2000/C');
+    document.body.innerHTML = '<div id="header"><div class="lang-chooser"><a href="/profile/otherHandle">otherHandle</a><a href="/logout">Logout</a></div></div><div id="pageContent"><div class="problem-statement"><div class="header"><div class="title">C. Test Problem</div></div></div></div>';
+    client.getPractice.mockResolvedValue({ ...practice, submissions: [{ id: 1, contestId: 2000, creationTimeSeconds: 1, problem: { contestId: 2000, index: 'C', name: 'Test Problem', tags: [] }, verdict: 'OK' }] });
+    await start();
+    expect(shadow('cfchart-problem-host').querySelector('.cf-problem-verdict-bar')).not.toBeNull();
   });
 });
