@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { recordPracticeFeedback } from '../../services/extensionClient';
+import { loadStoredTimer, saveStoredTimer } from './ProblemTimerWidget';
 
 interface Props {
   handle: string;
@@ -22,14 +23,40 @@ export const ProblemVerdictBar: React.FC<Props> = ({
     if (busy) return;
     setBusy(true);
     setMessage('');
+    const problemKey = `${contestId}-${index}`;
+
+    // Read timer elapsed time if available
+    const timerState = loadStoredTimer(problemKey);
+    let minutes: number | undefined;
+    if (timerState.elapsedMs > 0 || timerState.runningSince !== null) {
+      const totalElapsed =
+        timerState.elapsedMs +
+        (timerState.runningSince ? Math.max(0, Date.now() - timerState.runningSince) : 0);
+      if (totalElapsed >= 30_000) {
+        minutes = Math.max(1, Math.round(totalElapsed / 60000));
+      }
+      // Stop/pause timer since user has submitted and confirmed outcome
+      saveStoredTimer({
+        ...timerState,
+        elapsedMs: totalElapsed,
+        runningSince: null,
+      });
+    }
+
     try {
       await recordPracticeFeedback(handle, {
         id: crypto.randomUUID(),
-        problemKey: `${contestId}-${index}`,
+        problemKey,
         outcome: nextOutcome,
+        ...(minutes ? { minutes } : {}),
       });
       setOutcome(nextOutcome);
-      setMessage(nextOutcome === 'assisted' ? 'Saved (review scheduled)' : 'Saved');
+      const minText = minutes ? ` (${minutes} mins)` : '';
+      setMessage(
+        nextOutcome === 'assisted'
+          ? `Saved${minText} — review scheduled`
+          : `Saved${minText}`
+      );
       setTimeout(() => setMessage(''), 3000);
     } catch {
       setMessage('Could not save');
