@@ -30,7 +30,7 @@ export function startCFChart() {
   window.__cfchartDispose?.();
   let disposed = false, preferences: Preferences | null = null, header: Mount | null = null, profile: Mount | null = null, problemBar: Mount | null = null;
   let native: ReturnType<typeof preserveNativeGraph> | null = null;
-  let observedHandle: string | null = null, observedProblemKey: string | null = null, observedProblemHandle: string | null = null, pending = 0;
+  let observedHandle: string | null = null, observedProblemKey: string | null = null, pending = 0;
   let viewerChecked = false;
   const showNative = (visible: boolean) => {
     if (!native) {
@@ -45,7 +45,6 @@ export function startCFChart() {
     problemBar?.host.remove();
     problemBar = null;
     observedProblemKey = null;
-    observedProblemHandle = null;
   };
   const savePreferences = async (changes: Partial<Preferences>) => {
     const saved = await updatePreferences(changes); if (disposed) return;
@@ -126,7 +125,6 @@ export function startCFChart() {
               anchor.append(problemBar.host);
             }
             observedProblemKey = problemKeyStr;
-            observedProblemHandle = userHandle;
           }
           problemBar.root.render(
             <RenderBoundary>

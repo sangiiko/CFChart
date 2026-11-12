@@ -34,7 +34,12 @@ CFChart is a browser extension for **Firefox** and **Chromium-based browsers** (
   * **💡 Solved with help:** For problems solved using hints, editorials, or assistance. Maintains your daily goal and streak without falsely inflating your unassisted skill level, and automatically schedules an **Independent Review in 3 days**.
 * **Spaced repetition (`revisit` slot):** Exactly 3 days after an assisted solve, the problem re-enters your daily recommendations under the **Independent Review** slot to confirm concept retention.
 
-### 5. Architectural Privacy & Identity Isolation
+### 5. In-Page Problem Practice Timer & Thinking Countdown
+* **Practice Stopwatch:** Tracks real problem-solving duration (start, pause, reset). Automatically logs elapsed minutes into your practice history when marking a problem as solved.
+* **Thinking Countdown:** Sets dedicated thinking time limits (15m, 20m, 30m, 45m, or custom). Alerts you when time expires to suggest checking hints or editorials and prevent overthinking.
+* **State Persistence:** Preserves active time across tab switches, page reloads, and browser restarts.
+
+### 6. Architectural Privacy & Identity Isolation
 * **Shadow DOM encapsulation:** All in-page panels are isolated within Shadow DOMs to prevent CSS interference with Codeforces stylesheets.
 * **Strict identity separation:** The profile being viewed controls only the chart. Your configured personal handle controls personal progress and recommendations. Visiting other users' profiles never overrides your personal account.
 * **Automatic detection:** Detects your signed-in handle from Codeforces navigation links, or lets you enter any handle manually without requiring passwords or API keys.
