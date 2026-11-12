@@ -22,6 +22,28 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class FixtureHandler(BaseHTTPRequestHandler):
     def do_GET(self):
+        if self.path.startswith('/assets/'):
+            source = ROOT / 'dist' / 'assets' / Path(self.path).name
+            if not source.is_file():
+                self.send_error(404)
+                return
+            data = source.read_bytes()
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/css' if source.suffix == '.css' else 'text/javascript')
+            self.send_header('Content-Length', str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        if self.path in ('/ui/popup.html', '/ui/dashboard.html'):
+            page = self.path.rsplit('/', 1)[-1]
+            html = (ROOT / 'dist' / page).read_text().replace('<head>', '<head><script>' + MOCK_EXTENSION + '</script>')
+            data = html.encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.send_header('Content-Length', str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if self.path.startswith('/problemset/problem/'):
             html = '''<!doctype html><html><head><title>Codeforces problem fixture</title><style>
             body{margin:24px auto;max-width:1000px;background:#fff;color:#222;font:13px Arial}
@@ -31,7 +53,7 @@ class FixtureHandler(BaseHTTPRequestHandler):
             </style></head><body><div id="header"><strong style="font-size:28px">Codeforces</strong>
             <div class="lang-chooser"><a href="/profile/practice_user">practice_user</a></div></div>
             <div id="pageContent"><div class="problem-statement"><div class="header"><div class="title">C. Practice problem</div></div>
-            <p>Find the answer to the problem.</p></div></div></body></html>'''
+            <p>Find the answer to the problem.</p><span class="verdict-accepted">Accepted</span></div></div></body></html>'''
             data = html.encode()
             self.send_response(200)
             self.send_header('Content-Type', 'text/html; charset=utf-8')
@@ -76,11 +98,19 @@ globalThis.fetch = async function(input) {
 };
 '''
 
+MOCK_EXTENSION = r'''
+const preferences={personalHandle:'practice_user',dailyTarget:2,practiceMinutes:60,practiceMode:'adaptive',predictionParams:{dailyProblems:2,difficultyOffset:150,horizonMonths:6},chartView:'enhanced'};
+const recentDays=Array.from({length:30},(_,i)=>({dateStr:`2026-10-${String(i+1).padStart(2,'0')}`,solvedCount:i%4===0?2:i%3===0?1:0,targetMet:i%4===0}));
+const practice={handle:'practice_user',submissions:[],progress:{dailyTarget:2,todayCount:1,isTodayTargetMet:false,todayProblems:[],currentStreak:4,recentDays,lastUpdated:Date.now(),historyComplete:true},recommendations:[{contestId:200,index:'B',name:'Stretch task',rating:1900,tags:['dp'],slot:'core',slotLabel:'Core practice',pSolve:null,plannedMinutes:35,reasons:['Targets your current difficulty range.'],qualityScore:1,url:'https://codeforces.com/problemset/problem/200/B'}],updatedAt:Date.now(),coverage:{complete:true,loaded:120}};
+window.browser={runtime:{id:'preview',sendMessage:async m=>({ok:true,data:m.action==='getPreferences'?preferences:m.action==='getPractice'?practice:m.action==='updatePreferences'?Object.assign(preferences,m.preferences):null})},storage:{onChanged:{addListener:()=>{},removeListener:()=>{}}}};
+'''
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=ROOT / 'artifacts')
     parser.add_argument('--timer-only', action='store_true', help='Inspect the packaged problem timer without the profile checks')
+    parser.add_argument('--ui-only', action='store_true', help='Capture the packaged profile, tracker, popup, and timer UI')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault('SE_CACHE_PATH', str(Path(tempfile.gettempdir()) / 'cfchart-selenium'))
@@ -147,6 +177,35 @@ def main():
                 print(json.dumps({'checks': results, 'screenshots': ['timer-expanded.png', 'timer-settings.png', 'timer-collapsed.png', 'timer-narrow.png']}, indent=2))
                 return
 
+            if args.ui_only:
+                wait.until(lambda _: shadow("return document.querySelector('#cfchart-profile-host')?.shadowRoot?.querySelector('svg') != null"))
+                wait.until(lambda _: shadow("return document.querySelector('#cfchart-personal-host')?.shadowRoot?.querySelector('.cf-habit-pill')?.textContent.includes('Today')"))
+                driver.save_screenshot(str(args.output / 'ui-profile.png'))
+                shadow("document.querySelector('#cfchart-personal-host').shadowRoot.querySelector('.cf-habit-pill').click()")
+                wait.until(lambda _: shadow("return document.querySelector('#cfchart-personal-host')?.shadowRoot?.querySelector('.cf-popover') != null"))
+                wait.until(lambda _: shadow("return document.querySelector('#cfchart-personal-host')?.shadowRoot?.querySelector('.cf-daily-status') != null"))
+                driver.save_screenshot(str(args.output / 'ui-popover.png'))
+                shadow("document.querySelector('#pageContent').style.width='320px'")
+                assert shadow("return document.querySelector('#cfchart-profile-host').shadowRoot.querySelector('.cf-profile').scrollWidth <= document.querySelector('#cfchart-profile-host').shadowRoot.querySelector('.cf-profile').clientWidth")
+                driver.save_screenshot(str(args.output / 'ui-profile-narrow.png'))
+                driver.get(origin + '/ui/popup.html')
+                driver.set_window_size(480, 900)
+                wait.until(lambda _: shadow("return document.querySelector('.practice-app .count') != null"))
+                driver.save_screenshot(str(args.output / 'ui-popup.png'))
+                shadow("document.querySelector('.practice-app').style.width='320px'")
+                assert shadow("return document.querySelector('.practice-app').scrollWidth <= document.querySelector('.practice-app').clientWidth")
+                driver.save_screenshot(str(args.output / 'ui-popup-narrow.png'))
+                driver.get(origin + '/ui/dashboard.html')
+                driver.set_window_size(1100, 900)
+                wait.until(lambda _: shadow("return document.querySelector('.dashboard-layout .count') != null"))
+                driver.save_screenshot(str(args.output / 'ui-dashboard.png'))
+                driver.set_window_size(480, 900)
+                assert shadow("return document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+                driver.save_screenshot(str(args.output / 'ui-dashboard-narrow.png'))
+                check_timer()
+                print(json.dumps({'checks': ['Packaged profile, tracker, popup, dashboard and problem timer rendered at regular and narrow widths.'], 'screenshots': ['ui-profile.png', 'ui-popover.png', 'ui-popup.png', 'ui-dashboard.png', 'timer-expanded.png']}, indent=2))
+                return
+
             wait.until(lambda _: shadow("return document.querySelector('#cfchart-profile-host')?.shadowRoot?.querySelector('svg') != null"))
             wait.until(lambda _: shadow("return document.querySelector('#cfchart-personal-host')?.shadowRoot?.textContent.includes('Today 2/2')"))
             assert shadow("return document.querySelectorAll('#cfchart-profile-host').length") == 1
@@ -156,12 +215,6 @@ def main():
             assert shadow("return document.querySelector('#cfchart-profile-host').shadowRoot.textContent.includes('viewed_user')")
             results.append('Packaged content mounts one isolated chart; personal progress stays with practice_user; host styles/activity graph preserved.')
             driver.save_screenshot(str(args.output / 'profile.png'))
-
-            shadow("Array.from(document.querySelector('#cfchart-profile-host').shadowRoot.querySelectorAll('button')).find(b=>b.textContent==='Original').click()")
-            wait.until(lambda _: shadow("return getComputedStyle(document.querySelector('#userRatingGraphHolder')).display") != 'none')
-            shadow("Array.from(document.querySelector('#cfchart-profile-host').shadowRoot.querySelectorAll('button')).find(b=>b.textContent==='Enhanced').click()")
-            wait.until(lambda _: shadow("return getComputedStyle(document.querySelector('#userRatingGraphHolder')).display") == 'none')
-            results.append('Original/Enhanced toggle actually restores and conceals the native chart.')
 
             shadow("window.dispatchEvent(new Event('cfchart-smoke-info'))")
             wait.until(lambda _: shadow("return !!document.documentElement.dataset.cfchartInfo"))
@@ -182,9 +235,9 @@ def main():
 
             driver.get(origin + '/profile/unrated_user')
             wait.until(lambda _: shadow("return document.querySelector('#cfchart-profile-host')?.shadowRoot?.textContent.includes('Unrated')"))
-            assert shadow("return document.querySelector('#cfchart-profile-host').shadowRoot.textContent.includes('ML forecast unavailable')")
+            assert shadow("return document.querySelector('#cfchart-profile-host').shadowRoot.querySelector('.cf-forecast-unavailable') != null")
             assert not shadow("return document.querySelector('#cfchart-profile-host').shadowRoot.querySelector('.cf-scenario') != null")
-            results.append('Unrated profile has no fictional rating/scenario; missing ML model is disclosed.')
+            results.append('Unrated profile has no fictional rating/scenario; forecast unavailability is disclosed.')
             driver.set_window_size(720, 900)
             driver.save_screenshot(str(args.output / 'narrow.png'))
             check_timer()

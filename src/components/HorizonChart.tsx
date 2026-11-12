@@ -39,14 +39,15 @@ export const HorizonChart: React.FC<HorizonChartProps> = ({ data, currentRating,
   const scenarioEnd = scenario[scenario.length - 1];
   const ticks = Array.from({ length: 5 }, (_, i) => yMin + (yMax - yMin) * i / 4);
   return <div className="cf-chart">
+    <div className="cf-chart-plot">
     <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Official Codeforces rating history, ${history.length} contests${scenario.length ? ', with an illustrative practice scenario' : ''}${forecasts.length ? ', with model forecast intervals' : ''}`}>
       <title>Official Codeforces rating over time</title>
-      {bands.filter(b => b.to > yMin && b.from < yMax).map(b => <rect key={b.from} x={left} y={y(Math.min(yMax, b.to))} width={right - left} height={y(Math.max(yMin, b.from)) - y(Math.min(yMax, b.to))} fill={b.color} opacity="0.3" />)}
-      {ticks.map(tick => <g key={tick}><line x1={left} x2={right} y1={y(tick)} y2={y(tick)} stroke="#fff" strokeWidth="1" /><text x={left - 8} y={y(tick) + 4} textAnchor="end" className="cf-axis">{Math.round(tick)}</text></g>)}
+      {bands.filter(b => b.to > yMin && b.from < yMax).map(b => <rect key={b.from} x={left} y={y(Math.min(yMax, b.to))} width={right - left} height={y(Math.max(yMin, b.from)) - y(Math.min(yMax, b.to))} fill={b.color} opacity="0.16" />)}
+      {ticks.map(tick => <g key={tick}><line x1={left} x2={right} y1={y(tick)} y2={y(tick)} stroke="#dce5ed" strokeWidth="1" /><text x={left - 8} y={y(tick) + 4} textAnchor="end" className="cf-axis">{Math.round(tick)}</text></g>)}
       {Array.from({ length: 5 }, (_, i) => { const time = minTime + (maxTime - minTime) * i / 4; return <text key={i} x={x(time)} y={bottom + 24} textAnchor="middle" className="cf-axis">{date(time)}</text>; })}
       {currentRating != null && <line x1={left} x2={right} y1={y(currentRating)} y2={y(currentRating)} stroke="#64748b" strokeDasharray="3 5" opacity="0.5" />}
       {history.length > 1 && <path d={path(history, 'historicalRating')} stroke="#2563a6" strokeWidth="2" fill="none" vectorEffect="non-scaling-stroke" />}
-      {history.map((p, i) => <circle key={`${p.timestamp}-${i}`} cx={x(p.timestamp)} cy={y(p.historicalRating!)} r="3.5" fill={p.rankColor || '#2563a6'} stroke="#fff" strokeWidth="1" tabIndex={0}><title>{`${preciseDate(p.timestamp)} · ${p.contestName} · Rating ${p.historicalRating}${p.rank ? ` · Rank ${p.rank}` : ''}`}</title></circle>)}
+      {history.map((p, i) => <circle key={`${p.timestamp}-${i}`} cx={x(p.timestamp)} cy={y(p.historicalRating!)} r="3.5" fill={p.rankColor || '#2563a6'} stroke="#fff" strokeWidth="1"><title>{`${preciseDate(p.timestamp)} · ${p.contestName} · Rating ${p.historicalRating}${p.rank ? ` · Rank ${p.rank}` : ''}`}</title></circle>)}
       {scenario.length > 1 && <path d={path(scenario, 'predictedRating')} stroke="#64748b" strokeWidth="2" strokeDasharray="6 5" fill="none" vectorEffect="non-scaling-stroke" />}
       {scenario.length > 0 && <circle cx={x(scenarioEnd!.timestamp)} cy={y(scenarioEnd!.predictedRating!)} r="4" fill="#64748b"><title>{`Illustrative scenario · ${preciseDate(scenarioEnd!.timestamp)} · ${scenarioEnd!.predictedRating}`}</title></circle>}
       {history.length > 0 && forecasts.length > 0 && (
@@ -84,7 +85,6 @@ export const HorizonChart: React.FC<HorizonChartProps> = ({ data, currentRating,
               fill={tierColor}
               stroke="#fff"
               strokeWidth="1.5"
-              tabIndex={0}
             >
               <title>{`${p.horizonDays}-day forecast · ${p.median} (${tier.name}) · Range: ${p.lower}–${p.upper} (±${Math.round((p.upper - p.lower) / 2)} pts)`}</title>
             </circle>
@@ -92,7 +92,8 @@ export const HorizonChart: React.FC<HorizonChartProps> = ({ data, currentRating,
         );
       })}
     </svg>
-    <div className="cf-chart-legend"><span><i className="cf-history-key" />Official rating</span>{scenario.length > 0 && <span><i className="cf-scenario-key" />Illustrative scenario</span>}{forecasts.length > 0 && <span><i className="cf-forecast-key" />Rating forecast</span>}<span className="cf-chart-hint">Hover a contest point for details</span></div>
+    </div>
+    <div className="cf-chart-legend"><span><i className="cf-history-key" />Official rating</span>{scenario.length > 0 && <span><i className="cf-scenario-key" />Illustrative scenario</span>}{forecasts.length > 0 && <span><i className="cf-forecast-key" />Model estimate</span>}<span className="cf-chart-hint">Exact values in contest history</span></div>
     <details className="cf-history-table"><summary>Contest history ({history.length})</summary><div className="cf-table-scroll"><table><thead><tr><th>Date</th><th>Contest</th><th>Rank</th><th>Rating</th></tr></thead><tbody>{[...history].reverse().map((p, i) => <tr key={`${p.timestamp}-${i}`}><td>{preciseDate(p.timestamp)}</td><td>{p.contestName}</td><td>{p.rank ?? '—'}</td><td style={{ color: p.rankColor }}>{p.historicalRating}</td></tr>)}</tbody></table></div></details>
   </div>;
 };

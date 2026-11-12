@@ -27,6 +27,9 @@ describe('practice feedback UI', () => {
     expect(container.textContent).toContain('1400');
     expect(container.textContent).not.toContain('Practice plan');
     expect(container.textContent).not.toContain('50%');
+    expect(container.querySelector('details')?.open).toBe(false);
+    await act(async () => (container.querySelector('summary') as HTMLElement).click());
+    expect(container.querySelector('details')?.open).toBe(true);
     await act(async () => container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
     expect(client.recordPracticeFeedback).toHaveBeenCalledWith('alice', expect.objectContaining({ outcome: 'independent', problemKey: '10-A' }));
     expect(client.recordPracticeFeedback.mock.calls[0][1]).not.toHaveProperty('minutes');
@@ -48,5 +51,12 @@ describe('practice feedback UI', () => {
     expect(container.textContent).not.toContain('Why this problem');
     expect(container.textContent).not.toContain('Practice plan');
     expect(container.textContent).not.toContain('Up to 60 minutes today');
+  });
+  it('shows one next problem until more choices are requested', async () => {
+    const another = { ...problem, contestId: 11, index: 'B', name: 'Another task' };
+    await act(async () => root.render(<PracticeRecommendations handle="alice" recommendations={[problem, another]} />));
+    expect(container.querySelectorAll('.practice-task')).toHaveLength(1);
+    await act(async () => button('See 1 more choices').click());
+    expect(container.querySelectorAll('.practice-task')).toHaveLength(2);
   });
 });

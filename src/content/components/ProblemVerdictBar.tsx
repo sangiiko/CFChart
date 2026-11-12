@@ -18,11 +18,13 @@ export const ProblemVerdictBar: React.FC<Props> = ({
   const [outcome, setOutcome] = useState<'independent' | 'assisted' | null>(initialOutcome);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [saveError, setSaveError] = useState(false);
 
   const save = async (nextOutcome: 'independent' | 'assisted') => {
-    if (busy) return;
+    if (busy || outcome === nextOutcome) return;
     setBusy(true);
     setMessage('');
+    setSaveError(false);
     const problemKey = `${contestId}-${index}`;
 
     // Read timer elapsed time if available
@@ -35,12 +37,6 @@ export const ProblemVerdictBar: React.FC<Props> = ({
       if (totalElapsed >= 30_000) {
         minutes = Math.max(1, Math.round(totalElapsed / 60000));
       }
-      // Stop/pause timer since user has submitted and confirmed outcome
-      saveStoredTimer({
-        ...timerState,
-        elapsedMs: totalElapsed,
-        runningSince: null,
-      });
     }
 
     try {
@@ -50,45 +46,45 @@ export const ProblemVerdictBar: React.FC<Props> = ({
         outcome: nextOutcome,
         ...(minutes ? { minutes } : {}),
       });
+      if (timerState.runningSince !== null) {
+        saveStoredTimer({ ...timerState, elapsedMs: timerState.elapsedMs + Math.max(0, Date.now() - timerState.runningSince), runningSince: null });
+        window.dispatchEvent(new CustomEvent('cfchart:timer-saved-outcome', { detail: { problemKey } }));
+      }
       setOutcome(nextOutcome);
       const minText = minutes ? ` (${minutes} mins)` : '';
-      setMessage(
-        nextOutcome === 'assisted'
-          ? `Saved${minText} — review scheduled`
-          : `Saved${minText}`
-      );
-      setTimeout(() => setMessage(''), 3000);
+      setMessage(nextOutcome === 'assisted' ? `Saved${minText} · Review scheduled` : `Saved${minText} on this device`);
     } catch {
-      setMessage('Could not save');
-      setTimeout(() => setMessage(''), 3000);
+      setSaveError(true);
+      setMessage('Could not save. Try again.');
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <div className="cf-problem-verdict-bar" aria-label="CFChart problem outcome">
+    <div className="cf-problem-verdict-bar" role="group" aria-label="Record problem outcome">
+      <span className="cf-verdict-label">Record outcome</span>
       <button
         type="button"
         className={`cf-verdict-btn ${outcome === 'independent' ? 'is-solved' : ''}`}
-        disabled={busy}
+        disabled={busy || outcome === 'independent'}
+        aria-pressed={outcome === 'independent'}
         onClick={() => save('independent')}
         title="Mark as solved independently"
       >
-        <span>✓</span>
         <span>Solved</span>
       </button>
       <button
         type="button"
         className={`cf-verdict-btn ${outcome === 'assisted' ? 'is-assisted' : ''}`}
-        disabled={busy}
+        disabled={busy || outcome === 'assisted'}
+        aria-pressed={outcome === 'assisted'}
         onClick={() => save('assisted')}
         title="Mark as solved with help (schedules review)"
       >
-        <span>💡</span>
         <span>Solved with help</span>
       </button>
-      {message && <span className="cf-verdict-status" role="status">{message}</span>}
+      {message && <span className="cf-verdict-status" role={saveError ? 'alert' : 'status'}>{message}</span>}
     </div>
   );
 };

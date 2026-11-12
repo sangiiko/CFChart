@@ -16,12 +16,13 @@ export const TopBarHabitPill: React.FC<Props> = ({ preferences, onPreferencesCha
   const [revision, setRevision] = useState(0);
   const requestedOptions = useRef<RequestOptions>({ force: false, syncMore: false });
   const wrapper = useRef<HTMLDivElement>(null);
+  const pillRef = useRef<HTMLButtonElement>(null);
   const lastFetch = useRef(0);
   const handle = preferences.personalHandle;
   useEffect(() => {
     if (!open) return;
     const close = (event: Event) => { if (wrapper.current && !event.composedPath().includes(wrapper.current)) setOpen(false); };
-    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false); };
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { setOpen(false); pillRef.current?.focus(); } };
     document.addEventListener('pointerdown', close); document.addEventListener('keydown', escape);
     return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', escape); };
   }, [open]);
@@ -66,9 +67,9 @@ export const TopBarHabitPill: React.FC<Props> = ({ preferences, onPreferencesCha
   };
   const refresh = (more = false, resetHistory = false) => { requestedOptions.current = { force: true, syncMore: more, ...(resetHistory ? { resetHistory: true } : {}) }; setRevision(value => value + 1); };
   return <div className="cf-personal" ref={wrapper}>
-    <button type="button" className={`cf-habit-pill ${progress?.isTodayTargetMet ? 'is-complete' : ''}`} aria-expanded={open} aria-controls="cfchart-practice-popover" onClick={() => setOpen(value => !value)}><span className="cf-pill-symbol" aria-hidden="true">↗</span><span>{!handle ? 'Set up CFChart' : loading && !progress ? 'CFChart · syncing…' : progress ? `Today ${progress.todayCount}${todayUnknown ? '+' : ''}/${progress.dailyTarget}` : 'CFChart · unavailable'}</span>{progress && <span className="cf-streak">{progress.currentStreak}{progress.streakIsLowerBound ? '+' : ''}d streak</span>}<span aria-hidden="true">⌄</span></button>
+    <button ref={pillRef} type="button" className={`cf-habit-pill ${progress?.isTodayTargetMet ? 'is-complete' : ''}`} aria-expanded={open} aria-controls="cfchart-practice-popover" onClick={() => setOpen(value => !value)}><span className="cf-pill-symbol" aria-hidden="true">↗</span><span>{!handle ? 'Set up CFChart' : loading && !progress ? 'CFChart · syncing…' : progress ? `Today ${progress.todayCount}${todayUnknown ? '+' : ''}/${progress.dailyTarget}` : 'CFChart · unavailable'}</span>{progress && <span className="cf-streak">{progress.currentStreak}{progress.streakIsLowerBound ? '+' : ''}d streak</span>}<span aria-hidden="true">⌄</span></button>
     {open && <section id="cfchart-practice-popover" className="cf-popover" aria-label="Personal practice tracker">
-      <div className="cf-popover-heading"><div><span className="cf-small-label">YOUR DAILY PRACTICE</span><h2>{handle || 'Connect a Codeforces handle'}</h2></div><button type="button" className="cf-icon-button" aria-label="Close practice tracker" onClick={() => setOpen(false)}>×</button></div>
+      <div className="cf-popover-heading"><div><span className="cf-small-label">CFCHART</span><h2>{handle ? 'Today’s practice' : 'Connect a Codeforces handle'}</h2>{handle && <p className="cf-muted">@{handle}</p>}</div><button type="button" className="cf-icon-button" aria-label="Close practice tracker" onClick={() => { setOpen(false); pillRef.current?.focus(); }}>×</button></div>
       {(!handle || settingHandle) && <form className="cf-connect" onSubmit={connect}><label htmlFor="cfchart-handle-input">Codeforces handle</label><div className="cf-form-row"><input id="cfchart-handle-input" value={input} onChange={event => setInput(event.target.value)} required maxLength={24} placeholder="Your handle" autoComplete="off" /><button className="cf-button" disabled={busy} type="submit">{busy ? 'Checking…' : 'Connect'}</button></div><p className="cf-muted">Uses public profile data. No password needed.</p>{handle && <button type="button" className="cf-link" onClick={() => setSettingHandle(false)}>Cancel</button>}</form>}
       {error && <p className="cf-notice cf-error" role="alert">{error} {handle && <button type="button" className="cf-link" onClick={() => refresh()}>Retry</button>}</p>}
       {handle && !settingHandle && <>
@@ -76,10 +77,12 @@ export const TopBarHabitPill: React.FC<Props> = ({ preferences, onPreferencesCha
         {progress && <>
           <div className="cf-daily-status"><strong>{progress.todayCount}{todayUnknown ? '+' : ''}<span> / {progress.dailyTarget}</span></strong><div>{progress.isTodayTargetMet ? 'Daily goal complete' : `${Math.max(0, progress.dailyTarget - progress.todayCount)} more to reach your goal`}<small>{progress.currentStreak}{progress.streakIsLowerBound ? '+' : ''} day streak{progress.historyComplete === false ? ' · history still syncing' : ''}</small></div></div>
           <progress className="cf-progress" value={Math.min(progress.todayCount, progress.dailyTarget)} max={progress.dailyTarget} aria-label="Daily problem goal" />
+          <details className="cf-popover-details"><summary>Practice history and goal</summary>
           <div className="cf-goal-row"><label>Daily goal <select aria-label="Daily problem goal" value={preferences.dailyTarget} onChange={async event => { const target = Number(event.target.value); try { await onPreferencesChange({ dailyTarget: target, practiceMinutes: target <= 2 ? 60 : target * 35 }); refresh(); } catch (reason) { setError(String(reason)); } }}>{[1, 2, 3, 4, 5].map(target => <option key={target} value={target}>{target} problem{target > 1 ? 's' : ''}</option>)}</select></label><span className="cf-muted">Your local day</span></div>
           <div className="cf-heatmap" aria-label="Last 30 days of practice">{progress.recentDays.map(day => <span key={day.dateStr} className={day.unknown ? 'is-unknown' : day.targetMet ? 'is-met' : day.solvedCount > 0 ? 'is-some' : ''} title={`${day.dateStr}: ${day.unknown ? 'not synced yet' : `${day.solvedCount} unique problems`}`} />)}</div>
           <div className="cf-heatmap-caption"><span>30 days</span><span>Empty · partial · goal met</span></div>
           {progress.todayProblems.length > 0 && <div className="cf-problem-list"><h3>Solved today</h3>{progress.todayProblems.map(problem => <div className="cf-solved-row" key={problem.key}><a href={problem.url}><span>{problem.contestId}{problem.index} · {problem.name}</span><span className="cf-solved-check">✓</span></a><button type="button" className="cf-remove-solve" disabled={busy} aria-label={`Remove ${problem.name} from solved today`} title="Remove from solved today" onClick={async () => { setBusy(true); setError(''); try { await removeTodaySolve(handle, problem.key); setRevision(value => value + 1); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not remove problem.'); } finally { setBusy(false); } }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" /></svg></button></div>)}</div>}
+          </details>
           {current?.error && <p className="cf-notice" role="status">{current.error} Showing saved data.</p>}
           {current && !current.coverage.complete && <div className="cf-notice"><p>{current.coverage.loaded.toLocaleString()} submissions synced. Older activity is still unknown. Recommendations appear once the full solved history is checked.</p><button type="button" className="cf-link" disabled={loading} onClick={() => refresh(true)}>{loading ? 'Syncing…' : 'Sync more history'}</button></div>}
           {current?.coverage.complete && (

@@ -5,7 +5,6 @@ import { HorizonChart } from '../../components/HorizonChart';
 import { getRankTier } from '../../services/codeforcesApi';
 import { bundledForecastModel } from '../../ml';
 import { profileForecast, needsForecastHistory } from '../forecast';
-import { getExtensionApi } from '../../services/storage';
 
 type Profile = Awaited<ReturnType<typeof getProfile>>;
 type Practice = Awaited<ReturnType<typeof getPractice>>;
@@ -53,25 +52,25 @@ export const ProfileHorizonCard: React.FC<Props> = ({ handle, onNativeVisibility
   const forecast = forecastError ? { available: false as const, reason: `Forecast inputs unavailable: ${forecastError}` } : profileForecast(profile, practice, bundledForecastModel);
   const missingForecastHistory = needsForecastHistory(practice, bundledForecastModel);
   const currentRating = profile?.user.rating ?? null;
-  const iconUrl = getExtensionApi()?.runtime?.getURL ? getExtensionApi()?.runtime.getURL('icons/icon-48.png') : undefined;
+  const featuredForecast = forecast.available ? forecast.forecasts[0] : null;
+  const lastContest = profile?.ratings.reduce((latest, item) => Math.max(latest, item.ratingUpdateTimeSeconds), 0) ?? 0;
   return <section className="cf-panel cf-profile" aria-label={`CFChart for ${handle}`}>
     <div className="cf-panel-heading">
-      <div className="cf-heading-copy">
-        <span className="cf-brand-mark" aria-hidden="true">
-          {iconUrl ? <img src={iconUrl} width="24" height="24" alt="CFChart" /> : '↗'}
-        </span>
-        <div>
-          <h2>{handle}</h2>
-        </div>
-      </div>
+      <div className="cf-heading-copy"><div><h2>Rating history</h2><p>{handle} · Official Codeforces results{lastContest ? ` · Last contest ${new Date(lastContest * 1000).toLocaleDateString()}` : ''}</p></div></div>
+      <button type="button" className="cf-link" onClick={() => setRetry(value => value + 1)} disabled={loading}>Refresh</button>
     </div>
     {loading && <div className="cf-empty" role="status"><span className="cf-spinner" /> Loading official rating history…</div>}
     {error && <div className="cf-notice cf-error" role="alert">{error} <button type="button" className="cf-link" onClick={() => setRetry(value => value + 1)}>Retry</button><p>The original chart stays available below.</p></div>}
     {profile && !loading && <>
-      <div className="cf-stat-row"><div><span>Current rating</span><strong style={{ color: getRankTier(currentRating ?? undefined).color }}>{currentRating ?? 'Unrated'}</strong></div><div><span>Best rating</span><strong>{profile.user.maxRating ?? '—'}</strong></div><div><span>Rated contests</span><strong>{profile.ratings.length}</strong></div><div className="cf-sync-status"><span>{profile.stale ? 'Cached data' : 'Last synced'}</span><small>{new Date(profile.updatedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</small><button type="button" className="cf-link" onClick={() => setRetry(value => value + 1)}>Refresh</button></div></div>
+      <div className="cf-stat-row"><div><span>Official rating</span><strong style={{ color: getRankTier(currentRating ?? undefined).color }}>{currentRating ?? 'Unrated'}</strong></div><div><span>Best rating</span><strong>{profile.user.maxRating ?? '—'}</strong></div><div><span>Rated contests</span><strong>{profile.ratings.length}</strong></div><div className="cf-sync-status"><span>{profile.stale ? 'Saved data' : 'Checked'}</span><small>{new Date(profile.updatedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</small></div></div>
       {profile.error && <p className="cf-notice" role="status">{profile.error} {profile.stale ? 'Showing saved history.' : 'Some profile data is unavailable.'}</p>}
+      <div className="cf-forecast-summary" aria-label="Model forecast">
+        <div className="cf-forecast-summary-heading"><h3>Model estimate</h3><span>Not an official rating</span></div>
+        {featuredForecast ? <p><strong>{featuredForecast.horizonDays} days: {featuredForecast.median}</strong><span>Model range {featuredForecast.lower}–{featuredForecast.upper} · Inputs checked {new Date(Math.min(profile.updatedAt, practice?.updatedAt ?? profile.updatedAt)).toLocaleDateString()}</span></p> : <p className="cf-forecast-unavailable">{forecast.available ? 'Forecast values are unavailable.' : forecast.reason}</p>}
+      </div>
+      <p className="cf-chart-summary">{profile.ratings.length ? `Official rating history across ${profile.ratings.length} rated contest${profile.ratings.length === 1 ? '' : 's'}.` : 'No official rated contests yet.'} Open the contest history below for exact values.</p>
       <HorizonChart data={historicalChartPoints(profile.ratings)} currentRating={currentRating} forecasts={forecast.available ? forecast.forecasts : []} />
-      <div className="cf-forecast-note">
+      <details className="cf-forecast-note"><summary>Forecast details and data status</summary>
         {forecast.available ? <>
           <div className="cf-forecast-grid">
             {forecast.forecasts.map(p => {
@@ -92,11 +91,12 @@ export const ProfileHorizonCard: React.FC<Props> = ({ handle, onNativeVisibility
               </div>;
             })}
           </div>
+          <p>These are model estimates with uncertainty ranges. Actual contest results may differ.</p>
         </> : <p>{forecast.reason}</p>}
         {forecastError && <p className="cf-error" role="alert">{forecastError}</p>}
         {bundledForecastModel && (missingForecastHistory || forecastError || practice?.stale || practice?.error) && <button type="button" className="cf-link" disabled={forecastLoading} onClick={() => syncForecast(missingForecastHistory)}>{forecastLoading ? 'Syncing forecast inputs…' : missingForecastHistory ? 'Sync more forecast history' : 'Refresh forecast inputs'}</button>}
         {bundledForecastModel && missingForecastHistory && <p>Loads one older page of submissions per click. Complete coverage is required for the model’s practice window.</p>}
-      </div>
+      </details>
     </>}
   </section>;
 };

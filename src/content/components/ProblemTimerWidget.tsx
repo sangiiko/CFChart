@@ -114,6 +114,18 @@ export const ProblemTimerWidget: React.FC<Props> = ({ problemKey, onTimeUpdate }
   }, [problemKey]);
 
   useEffect(() => {
+    const syncSavedOutcome = (event: Event) => {
+      if ((event as CustomEvent<{ problemKey: string }>).detail?.problemKey !== problemKey) return;
+      const updated = loadStoredTimer(problemKey);
+      stateRef.current = updated;
+      setTimer(updated);
+      setNow(Date.now());
+    };
+    window.addEventListener('cfchart:timer-saved-outcome', syncSavedOutcome);
+    return () => window.removeEventListener('cfchart:timer-saved-outcome', syncSavedOutcome);
+  }, [problemKey]);
+
+  useEffect(() => {
     if (!settingsOpen) return;
     const closeOnOutsideClick = (event: PointerEvent) => {
       if (!event.composedPath().includes(settingsRef.current as EventTarget)) {

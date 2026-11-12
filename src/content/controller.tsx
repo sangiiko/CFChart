@@ -7,7 +7,9 @@ import { ProblemVerdictBar } from './components/ProblemVerdictBar';
 import { ProblemTimerWidget } from './components/ProblemTimerWidget';
 import { headerAnchor, profileAnchor, profileHandle, ratingGraph, preserveNativeGraph, viewerHandle, parseProblemPath, problemHeaderAnchor, hasAcceptedVerdictInPage } from './dom';
 import type { PracticeLedger } from '../recommender/types';
+import { latestEvents } from '../recommender/events';
 import contentStyles from './content.css';
+import uiTokens from '../ui/tokens.css';
 
 type Preferences = Awaited<ReturnType<typeof getPreferences>>;
 interface Mount { host: HTMLElement; root: Root }
@@ -20,7 +22,7 @@ class RenderBoundary extends Component<{ children: ReactNode; onFailure?: () => 
 function createMount(id: string): Mount {
   const host = document.createElement('div'); host.id = id; host.dataset.cfchartHost = 'true';
   const shadow = host.attachShadow({ mode: 'open' });
-  const style = document.createElement('style'); style.textContent = contentStyles;
+  const style = document.createElement('style'); style.textContent = uiTokens + contentStyles;
   const app = document.createElement('div'); app.className = 'cf-app'; shadow.append(style, app);
   return { host, root: createRoot(app) };
 }
@@ -109,9 +111,7 @@ export function startCFChart() {
             s => s.verdict === 'OK' && s.problem?.contestId === problemInfo.contestId && s.problem?.index?.toUpperCase() === problemInfo.index
           );
           const isAccepted = isPageAccepted || Boolean(isHistoryAccepted);
-          const existingEvent = data?.ledger?.events?.find(
-            e => e.problemKey === problemKeyStr && e.provenance === 'self-report'
-          );
+          const existingEvent = latestEvents(data?.ledger?.events?.filter(e => e.provenance === 'self-report') ?? []).get(problemKeyStr);
           const initialOutcome = existingEvent?.outcome === 'assisted' ? 'assisted' : existingEvent?.outcome === 'independent' ? 'independent' : null;
 
           if (!problemBar || !problemBar.host.isConnected || observedProblemKey !== problemKeyStr) {

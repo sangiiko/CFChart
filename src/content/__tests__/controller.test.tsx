@@ -111,6 +111,16 @@ describe('in-page content integration', () => {
     expect(personal.textContent).not.toContain('Older verdicts may change after a rejudge');
     expect(personal.textContent).not.toContain('Recheck solved history');
   });
+  it('keeps practice history folded and returns focus to the toolbar pill on Escape', async () => {
+    await start();
+    const personal = shadow('cfchart-personal-host');
+    const pill = personal.querySelector<HTMLButtonElement>('.cf-habit-pill')!;
+    await act(async () => pill.click());
+    expect(personal.querySelector<HTMLDetailsElement>('.cf-popover-details')?.open).toBe(false);
+    await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    expect(personal.querySelector('.cf-popover')).toBeNull();
+    expect(personal.activeElement).toBe(pill);
+  });
   it('remounts exactly once after reinjection', async () => {
     await start(); await start();
     expect(document.querySelectorAll('#cfchart-profile-host')).toHaveLength(1);

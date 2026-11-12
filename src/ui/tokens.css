@@ -1,0 +1,16 @@
+:root,:host{
+  --cf-blue:#245c96;
+  --cf-blue-hover:#184979;
+  --cf-text:#223246;
+  --cf-muted:#536579;
+  --cf-subtle:#65768a;
+  --cf-surface:#fff;
+  --cf-canvas:#f7f9fb;
+  --cf-soft:#f2f6fa;
+  --cf-border:#d6e0e9;
+  --cf-control-border:#8497aa;
+  --cf-green:#207248;
+  --cf-amber:#765319;
+  --cf-focus:#155a9b;
+  --cf-radius:8px;
+}
