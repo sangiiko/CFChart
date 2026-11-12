@@ -1,8 +1,10 @@
 # Browser-local rating forecasts
 
+For the completed top-10,000 cohort, the frozen audit, model experiments, and release decisions are documented in [TOP10000_MODEL_PLAN.md](TOP10000_MODEL_PLAN.md) and [TOP10000_MODEL_RESULTS.md](TOP10000_MODEL_RESULTS.md). The experiment scripts write ignored artifacts under `ml/artifacts`; they do not replace the bundled model automatically.
+
 CFChart supports **LightGBM quantile regression** without requiring a Python server or a browser ML framework at runtime. Python trains six small nonlinear tree ensembles offline; the extension evaluates their versioned JSON locally. The chart integration stays independent of the model implementation.
 
-**No trained weights ship with this repository.** `src/ml/registry.ts` intentionally exports `null`. Until a model trained on real historical data passes the gates below, the UI reports that ML forecasting is unavailable. The optional practice scenario remains a separately labeled heuristic; it is never presented as a learned forecast.
+The repository currently bundles the validated `cfchart-top5000-v1` weights through `src/ml/registry.ts`. The top-10,000 research candidates remain offline because they did not pass the updated forecast gates. The optional practice scenario remains a separately labeled heuristic; it is never presented as a learned forecast.
 
 ## Forecast definition
 

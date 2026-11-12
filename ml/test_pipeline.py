@@ -79,6 +79,12 @@ class PipelineTests(unittest.TestCase):
         self.assertTrue(all(held_out_user(r["handle"]) for r in unseen))
         self.assertFalse({r["handle"] for r in training} & {r["handle"] for r in unseen})
 
+    def test_windowed_feature_extraction_matches_full_history(self):
+        snapshot = synthetic_snapshots()[0]
+        rows = make_examples([snapshot])
+        for row in rows:
+            self.assertEqual(row["x"], build_features(snapshot, row["asOf"]))
+
     def test_numeric_export_semantics_and_rejects_categories(self):
         node = {"split_feature": 0, "threshold": 1.5, "decision_type": "<=", "missing_type": "NaN",
                 "default_left": True, "left_child": {"leaf_value": 3}, "right_child": {"leaf_value": -1}}
@@ -95,6 +101,12 @@ class PipelineTests(unittest.TestCase):
         self.assertTrue(passes_gate(good))
         self.assertFalse(passes_gate(dict(good, users=9)))
         good["horizons"]["30"]["intervalCoverage"] = 1
+        self.assertFalse(passes_gate(good))
+        good["horizons"]["30"]["intervalCoverage"] = 0.8
+        good["horizons"]["30"]["mae"] = 9.8
+        self.assertFalse(passes_gate(good))
+        good["horizons"]["30"]["mae"] = 9
+        good["horizons"]["30"]["ratingBands"] = {"under1200": {"rows": 30, "mae": 12, "unchangedMae": 10}}
         self.assertFalse(passes_gate(good))
 
     def test_training_export_native_and_runtime_parity(self):

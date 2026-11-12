@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import subprocess
+from bisect import bisect_right
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -15,8 +16,8 @@ from .features import DAY, FEATURE_NAMES, build_features, covers_history, rating
 
 HORIZONS = (30, 90)
 HORIZON_QUANTILES = {
-    30: (0.05, 0.5, 0.95),
-    90: (0.04, 0.5, 0.96),
+    30: (0.1, 0.5, 0.9),
+    90: (0.1, 0.5, 0.9),
 }
 
 
@@ -27,7 +28,8 @@ def held_out_user(handle):
 
 def make_examples(snapshots, stride_days=28):
     examples = []
-    for item in snapshots:
+    total = len(snapshots)
+    for index, item in enumerate(snapshots, 1):
         if isinstance(item, (str, Path)):
             path = Path(item)
             try:
@@ -42,18 +44,28 @@ def make_examples(snapshots, stride_days=28):
         ratings = sorted(snapshot.get("ratings", []), key=lambda r: r["ratingUpdateTimeSeconds"])
         if not ratings:
             continue
+        submissions = sorted(snapshot.get("submissions", []), key=lambda s: s["creationTimeSeconds"])
+        submission_times = [s["creationTimeSeconds"] for s in submissions]
+        rating_times = [r["ratingUpdateTimeSeconds"] for r in ratings]
         observation_end = min(snapshot.get("ratingsFetchedAt", 0), snapshot.get("submissionsFetchedAt", 0))
         start = (ratings[0]["ratingUpdateTimeSeconds"] // DAY + 91) * DAY
         stop = observation_end - max(HORIZONS) * DAY
         for as_of in range(start, int(stop) + 1, stride_days * DAY):
-            past = [r for r in ratings if r["ratingUpdateTimeSeconds"] <= as_of]
-            if len(past) < 3 or not covers_history(snapshot, as_of):
+            rating_end = bisect_right(rating_times, as_of)
+            if rating_end < 3 or not covers_history(snapshot, as_of):
                 continue
-            x = build_features(snapshot, as_of)
+            submission_start = bisect_right(submission_times, as_of - 90 * DAY)
+            submission_end = bisect_right(submission_times, as_of)
+            recent = {"ratings": ratings[:rating_end],
+                      "submissions": submissions[submission_start:submission_end]}
+            x = build_features(recent, as_of)
             examples.append({"handle": snapshot["handle"], "asOf": as_of, "x": x,
                              "y": [rating_at(ratings, as_of + days * DAY) for days in HORIZONS],
+                             "participated": [bisect_right(rating_times, as_of + days * DAY) > rating_end for days in HORIZONS],
                              "path": str(path) if path else None,
                              "snapshot": snapshot if path is None else None})
+        if index % 100 == 0 or index == total:
+            print(f"Prepared {index:,}/{total:,} user histories; {len(examples):,} training snapshots", flush=True)
     return examples
 
 
@@ -114,8 +126,14 @@ def passes_gate(report, min_rows=100, min_users=10):
     if not report or report.get("rows", 0) < min_rows or report.get("users", 0) < min_users:
         return False
     for metrics in report["horizons"].values():
-        if not 0.50 <= metrics["intervalCoverage"] <= 0.95:
+        baseline = min(metrics["unchangedMae"], metrics["trendMae"])
+        if baseline <= 0 or metrics["mae"] >= baseline * 0.97:
             return False
+        if not 0.70 <= metrics["intervalCoverage"] <= 0.90:
+            return False
+        for band in metrics["ratingBands"].values():
+            if band["rows"] >= 30 and band["mae"] > band["unchangedMae"] * 1.10:
+                return False
     return True
 
 

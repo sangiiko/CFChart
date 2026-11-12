@@ -1,5 +1,7 @@
 # Practice-outcome research pipeline
 
+The top-10,000 experiment in [TOP10000_MODEL_RESULTS.md](../TOP10000_MODEL_RESULTS.md) compares a fitted logistic baseline with a calibrated LightGBM candidate. Its stronger offline acceptance results do **not** authorize deployment as a recommendation policy; it still needs exact browser feature parity and evaluation of recommendations actually shown to users.
+
 This pipeline trains and evaluates practice recommendation models using available public Codeforces data (`--cohort`) or explicitly shared CFChart practice exports (`--exports`). It is separate from the official-rating forecasting pipeline. No upload service is enabled.
 
 ## Training with Public Codeforces Cohort

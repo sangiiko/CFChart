@@ -40,6 +40,7 @@ class Client:
             self.remaining -= 1
             atomic_json(self.state_path, {"lastStarted": self.last_started})
             url = f"https://codeforces.com/api/{method}?{urllib.parse.urlencode(params)}"
+            print(f"  API {method} attempt {attempt + 1}/3; {self.remaining} requests remain", flush=True)
             try:
                 req = urllib.request.Request(url, headers={"User-Agent": "CFChart-training-collector/1.0"})
                 with urllib.request.urlopen(req, timeout=30) as response:
@@ -50,6 +51,7 @@ class Client:
             except (urllib.error.URLError, ValueError, TimeoutError) as exc:
                 error = exc
                 if attempt < 2:
+                    print(f"  Request failed ({exc}); retrying after {2 ** (attempt + 1)}s", flush=True)
                     time.sleep(2 ** (attempt + 1))
         raise RuntimeError(f"{method} failed after bounded retries: {error}")
 
@@ -64,7 +66,10 @@ def collect_handle(client, path, handle, page_size):
         snapshot["ratings"] = client.request("user.rating", handle=handle)
         snapshot["ratingsFetchedAt"] = int(time.time())
         atomic_json(path, snapshot)
+        print(f"  Saved {len(snapshot['ratings'])} contest ratings for {handle}", flush=True)
     while not snapshot["coverage"]["complete"]:
+        page_from = snapshot["nextFrom"]
+        print(f"  {handle}: requesting submissions {page_from}–{page_from + page_size - 1} (saved so far: {len(snapshot['submissions'])})", flush=True)
         page = client.request("user.status", handle=handle, **{"from": snapshot["nextFrom"], "count": page_size})
         merged = {s["id"]: s for s in snapshot["submissions"]}
         merged.update({s["id"]: s for s in page})
@@ -76,6 +81,7 @@ def collect_handle(client, path, handle, page_size):
             "oldestSubmissionTimeSeconds": min((s["creationTimeSeconds"] for s in merged.values()), default=None),
         }
         atomic_json(path, snapshot)
+        print(f"  {handle}: checkpoint saved; received {len(page)}; total {len(snapshot['submissions'])}; complete={snapshot['coverage']['complete']}; nextFrom={snapshot['nextFrom']}", flush=True)
 
 
 def main():
@@ -102,9 +108,24 @@ def main():
     os.close(lock_fd)
     client = Client(args.output, args.max_requests, args.interval)
     try:
-        for handle in handles:
-            print(f"Collecting {handle}; {client.remaining} requests remain", flush=True)
+        total_handles = len(handles)
+        for handle_index, handle in enumerate(handles, 1):
+            path = args.output / "users" / f"{handle.lower()}.json"
+            if path.exists():
+                try:
+                    saved = json.loads(path.read_text())
+                    state = f"resume at submission {saved.get('nextFrom', 1)}; {len(saved.get('submissions', []))} saved; complete={saved.get('coverage', {}).get('complete', False)}"
+                except Exception:
+                    state = "existing checkpoint unreadable; collector will report an error"
+            else:
+                state = "new user"
+            pct = (handle_index - 1) * 100 / max(total_handles, 1)
+            bar = "█" * int(pct // 4) + "░" * (25 - int(pct // 4))
+            print(f"\n[{bar}] {pct:6.2f}% | user {handle_index:,}/{total_handles:,} | {handle} | {client.remaining:,} requests left | {state}", flush=True)
             collect_handle(client, args.output / "users" / f"{handle.lower()}.json", handle, args.page_size)
+            pct = handle_index * 100 / max(total_handles, 1)
+            bar = "█" * int(pct // 4) + "░" * (25 - int(pct // 4))
+            print(f"[{bar}] {pct:6.2f}% | finished user {handle_index:,}/{total_handles:,} | {handle}", flush=True)
     except BudgetExhausted:
         print("Request budget reached. Re-run the same command to resume.")
     finally:

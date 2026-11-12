@@ -2,13 +2,22 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from .train import load_rows_from_exports, load_rows_from_cohort, train, fit, metrics
+from .train import load_rows_from_exports, load_rows_from_cohort, train, fit, metrics, passes_deployment_gate
 
 # Backward compatibility alias
 load_rows = load_rows_from_exports
 
 
 class PipelineTests(unittest.TestCase):
+    def test_deployment_requires_improvement_on_both_holdouts(self):
+        good = {'rows': 200, 'users': 20, 'logLoss': .4, 'brier': .14, 'calibrationError': .04}
+        baseline = dict(good, logLoss=.5, brier=.2)
+        split = {'baseline': baseline, 'candidate': good}
+        evaluation = {'future': split, 'unseenUsers': split, 'stratified': {}, 'stratifiedBaseline': {}}
+        self.assertTrue(passes_deployment_gate(evaluation))
+        evaluation['unseenUsers'] = {'baseline': baseline, 'candidate': dict(good, brier=.21)}
+        self.assertFalse(passes_deployment_gate(evaluation))
+
     def export(self, root, events):
         problem = {'contestId': 1, 'index': 'A', 'rating': 1500, 'slot': 'core', 'plannedMinutes': 30}
         records = [dict(version=1, id=str(i), problemKey='1-A', timestamp=2000+i, provenance='self-report',
@@ -70,6 +79,8 @@ class PipelineTests(unittest.TestCase):
             # Repeated submissions on 10-A are grouped into 1 episode (earliest attempt preserved)
             self.assertEqual(by_key['10-A']['at'], 1500 * 1000)
             self.assertEqual(by_key['10-A']['observed'], 1600 * 1000)
+            self.assertEqual(by_key['10-A']['x_boost'][2:4], [0, 0])
+            self.assertEqual(by_key['10-B']['x_boost'][2:4], [1, 1])
 
 
 if __name__ == '__main__':

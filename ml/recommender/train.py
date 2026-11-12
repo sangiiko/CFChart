@@ -1,13 +1,12 @@
 """Fit an interpretable solve/acceptance model from public Codeforces data or exports.
 
-Standard-library only.
 Trains and evaluates models only whose targets available data actually supports.
 Unsupported models (independent unassisted solve within fixed budget, competing
 assistance hazards, causal 90-day rating trial) remain explicitly disabled with
 working adaptive fallback.
 """
 import argparse
-from collections import Counter
+from collections import Counter, deque
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -91,7 +90,7 @@ def load_rows_from_exports(directory, budget=30):
     return list(unique.values()), dict(excluded)
 
 
-def load_rows_from_cohort(directory, max_users=None):
+def load_rows_from_cohort(directory, max_users=None, episodes_per_user=None):
     """Load problem attempt episodes from public Codeforces submissions and rating history.
     
     Target: Historical problem acceptance (y=1 if solved, y=0 if attempted without solve).
@@ -105,7 +104,7 @@ def load_rows_from_cohort(directory, max_users=None):
     paths = sorted(Path(directory).glob('*.json'))
     if max_users:
         paths = paths[:max_users]
-    for path in paths:
+    for index, path in enumerate(paths, 1):
         try:
             data = json.loads(path.read_text())
         except Exception:
@@ -145,7 +144,26 @@ def load_rows_from_cohort(directory, max_users=None):
             if s.get('verdict') == 'OK':
                 ep['ok'] = True
 
-        for key, ep in episodes_by_prob.items():
+        episodes = sorted(episodes_by_prob.items(), key=lambda item: item[1]['earliest'])
+        recent = deque()
+        for _, ep in episodes:
+            earliest = ep['earliest']
+            while recent and recent[0]['earliest'] <= earliest - 90 * 86400:
+                recent.popleft()
+            ep['recent_attempts90'] = len(recent)
+            known_solved = [prev for prev in recent if prev['ok'] and prev['latest'] <= earliest]
+            ep['recent_solved90'] = len(known_solved)
+            tags = set(ep['tags'] or [])
+            ep['recent_tag_solved90'] = sum(bool(tags.intersection(prev['tags'] or [])) for prev in known_solved)
+            ep['days_since_attempt'] = min(3650, (earliest - recent[-1]['earliest']) / 86400) if recent else 3650
+            recent.append(ep)
+        if episodes_per_user and len(episodes) > episodes_per_user:
+            # Evenly spaced episodes preserve each user's career, not only the newest period.
+            original_count = len(episodes)
+            episodes = [episodes[i * (original_count - 1) // (episodes_per_user - 1)]
+                        for i in range(episodes_per_user)]
+            excluded['sampled_episodes'] += original_count - len(episodes)
+        for key, ep in episodes:
             t_ms = ep['earliest'] * 1000
             past_ratings = [r['newRating'] for r in ratings if r['ratingUpdateTimeSeconds'] * 1000 <= t_ms]
             u_rating = past_ratings[-1] if past_ratings else ratings[0]['oldRating']
@@ -162,7 +180,12 @@ def load_rows_from_cohort(directory, max_users=None):
                 'x': [1.0, (p_rating - u_rating) / 400.0, (u_rating - 1400.0) / 400.0],
                 'rating': u_rating,
                 'difficulty': p_rating,
+                'x_boost': [(p_rating - u_rating) / 400.0, (u_rating - 1400.0) / 400.0,
+                            ep['recent_attempts90'], ep['recent_solved90'],
+                            ep['recent_tag_solved90'], ep['days_since_attempt'], len(ep['tags'] or [])],
             })
+        if index % 250 == 0 or index == len(paths):
+            print(f'Loaded {index:,}/{len(paths):,} users; {len(rows):,} attempt episodes', flush=True)
     return rows, dict(excluded)
 
 
@@ -178,6 +201,25 @@ def predict(weights, row):
 def fit(rows, iterations=800, lr=0.05, l2=0.01):
     """MAP-style regularized logistic regression with monotone difficulty constraint."""
     prior = [2.0, -math.log(10), 0.2]
+    if len(rows) >= 10000:
+        import numpy as np
+        from scipy.optimize import minimize
+        from scipy.special import expit
+        x = np.asarray([r['x'] for r in rows], dtype=np.float64)
+        y = np.asarray([r['y'] for r in rows], dtype=np.float64)
+        prior_array = np.asarray(prior)
+        def objective(weights):
+            z = x @ weights
+            delta = weights - prior_array
+            loss = np.logaddexp(0, z).mean() - np.dot(y, z) / len(y) + l2 * np.dot(delta, delta) / 2
+            gradient = x.T @ (expit(z) - y) / len(y) + l2 * delta
+            return float(loss), gradient
+        result = minimize(objective, prior_array, jac=True, method='L-BFGS-B',
+                          bounds=[(None, None), (None, 0), (None, None)],
+                          options={'maxiter': 100, 'ftol': 1e-10})
+        if not result.success and result.nit >= 100:
+            raise RuntimeError(f'Logistic optimizer did not converge: {result.message}')
+        return result.x.tolist()
     weights = prior[:]
     n = max(1, len(rows))
     for _ in range(iterations):
@@ -211,13 +253,35 @@ def metrics(rows, weights):
     log_loss = -sum(y * math.log(max(eps, min(1 - eps, p))) + (1 - y) * math.log(max(eps, min(1 - eps, 1 - p)))
                     for p, y in pairs) / len(pairs)
     brier = sum((p - y) ** 2 for p, y in pairs) / len(pairs)
+    calibration_error = sum(item['n'] * abs(item['predicted'] - item['observed']) for item in bins) / len(pairs)
     return {
         'rows': len(rows),
         'users': len({r['user'] for r in rows}),
         'logLoss': log_loss,
         'brier': brier,
+        'calibrationError': calibration_error,
         'reliability': bins,
     }
+
+
+def passes_deployment_gate(evaluation, min_rows=100, min_users=10):
+    """Require future and unseen-user gains, usable calibration, and subgroup safety."""
+    for name in ('future', 'unseenUsers'):
+        split = evaluation.get(name, {})
+        baseline, candidate = split.get('baseline'), split.get('candidate')
+        if not baseline or not candidate or candidate['rows'] < min_rows or candidate['users'] < min_users:
+            return False
+        if candidate['logLoss'] >= baseline['logLoss'] * 0.99:
+            return False
+        if candidate['brier'] >= baseline['brier'] * 0.99:
+            return False
+        if candidate['calibrationError'] > 0.10:
+            return False
+    for band, candidate in evaluation.get('stratified', {}).items():
+        baseline = evaluation.get('stratifiedBaseline', {}).get(band)
+        if baseline and candidate['rows'] >= 100 and candidate['brier'] > baseline['brier'] * 1.10:
+            return False
+    return True
 
 
 def stratified_metrics(rows, weights):
@@ -237,9 +301,11 @@ def stratified_metrics(rows, weights):
     return result
 
 
-def train(source_dir, output_dir, cutoff, source_type='cohort', budget=30, max_users=None):
+def train(source_dir, output_dir, cutoff, source_type='cohort', budget=30, max_users=None,
+          episodes_per_user=None):
     if source_type == 'cohort':
-        rows, excluded = load_rows_from_cohort(source_dir, max_users=max_users)
+        rows, excluded = load_rows_from_cohort(source_dir, max_users=max_users,
+                                               episodes_per_user=episodes_per_user)
         target_name = 'historical_acceptance'
     else:
         rows, excluded = load_rows_from_exports(source_dir, budget=budget)
@@ -254,6 +320,19 @@ def train(source_dir, output_dir, cutoff, source_type='cohort', budget=30, max_u
     weights = fit(training) if ready else None
     baseline = [2.0 if source_type == 'cohort' else 0., -math.log(10), 0.]
 
+    evaluation = {
+        'future': {
+            'baseline': metrics(future, baseline),
+            'candidate': metrics(future, weights) if weights else None,
+        },
+        'unseenUsers': {
+            'baseline': metrics(holdout, baseline),
+            'candidate': metrics(holdout, weights) if weights else None,
+        },
+        'stratified': stratified_metrics(holdout, weights) if weights else {},
+        'stratifiedBaseline': stratified_metrics(holdout, baseline),
+    }
+    validated = bool(ready and passes_deployment_gate(evaluation))
     report = {
         'schemaVersion': 1,
         'target': target_name,
@@ -262,9 +341,14 @@ def train(source_dir, output_dir, cutoff, source_type='cohort', budget=30, max_u
         'excluded': excluded,
         'trainingRows': len(training),
         'trainingUsers': len({r['user'] for r in training}),
-        'status': 'trained_model' if ready else 'insufficient_data',
-        'validated': bool(ready),
-        'deploymentAllowed': bool(ready and source_type == 'cohort'),
+        'status': 'validated_model' if validated else 'candidate_failed_gate' if ready else 'insufficient_data',
+        'validated': validated,
+        'deploymentAllowed': False,
+        'deploymentReason': 'Offline acceptance evaluation only; no TypeScript runtime parity or recommendation-policy evaluation',
+        'gateSpecification': {'minRowsPerHoldout': 100, 'minUsersPerHoldout': 10,
+                              'minimumLogLossImprovement': 0.01, 'minimumBrierImprovement': 0.01,
+                              'maximumCalibrationError': 0.10, 'subgroupMaxBrierRatio': 1.10,
+                              'subgroupMinimumRows': 100},
         'limitations': [
             'Observational Codeforces public data with unknown assistance',
             'Thinking time before submission is unobserved and not inferred',
@@ -272,17 +356,7 @@ def train(source_dir, output_dir, cutoff, source_type='cohort', budget=30, max_u
             'Does not measure causal rating gain or learning transfer',
             'Unsupported models (causal rating trials, survival hazards) remain disabled with adaptive fallback',
         ],
-        'evaluation': {
-            'future': {
-                'baseline': metrics(future, baseline),
-                'candidate': metrics(future, weights) if weights else None,
-            },
-            'unseenUsers': {
-                'baseline': metrics(holdout, baseline),
-                'candidate': metrics(holdout, weights) if weights else None,
-            },
-            'stratified': stratified_metrics(holdout, weights) if weights else {},
-        },
+        'evaluation': evaluation,
     }
 
     output = Path(output_dir)
@@ -292,8 +366,8 @@ def train(source_dir, output_dir, cutoff, source_type='cohort', budget=30, max_u
     candidate_artifact = {
         'schemaVersion': 1,
         'target': target_name,
-        'validated': bool(ready),
-        'deploymentAllowed': bool(ready and source_type == 'cohort'),
+        'validated': validated,
+        'deploymentAllowed': False,
         'features': FEATURES,
         'weights': weights,
         'cutoffMs': cutoff,
@@ -314,7 +388,11 @@ def main():
     parser.add_argument('--cutoff', required=True, help='Preregistered UTC split date, YYYY-MM-DD')
     parser.add_argument('--budget', type=int, default=30)
     parser.add_argument('--max-users', type=int, default=None)
+    parser.add_argument('--episodes-per-user', type=int, default=None,
+                        help='Evenly sample this many first-attempt episodes per user to bound memory')
     args = parser.parse_args()
+    if args.episodes_per_user is not None and args.episodes_per_user < 2:
+        parser.error('--episodes-per-user must be at least 2')
 
     source_dir = args.cohort or args.exports
     source_type = 'cohort' if args.cohort else 'exports'
@@ -322,7 +400,8 @@ def main():
         parser.error(f'Directory does not exist: {source_dir}')
 
     cutoff = datetime.fromisoformat(args.cutoff + 'T00:00:00+00:00').replace(tzinfo=timezone.utc).timestamp() * 1000
-    report = train(source_dir, args.output, cutoff, source_type=source_type, budget=args.budget, max_users=args.max_users)
+    report = train(source_dir, args.output, cutoff, source_type=source_type, budget=args.budget,
+                   max_users=args.max_users, episodes_per_user=args.episodes_per_user)
     print(json.dumps(report, indent=2))
 
 
