@@ -1,0 +1,183 @@
+// @vitest-environment jsdom
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  ProblemTimerWidget,
+  formatTime,
+  loadStoredTimer,
+  saveStoredTimer,
+  getTimerStorageKey,
+} from '../ProblemTimerWidget';
+
+const store = new Map<string, string>();
+const fakeStorage = {
+  getItem: (key: string) => store.get(key) ?? null,
+  setItem: (key: string, val: string) => { store.set(key, String(val)); },
+  removeItem: (key: string) => { store.delete(key); },
+  clear: () => { store.clear(); },
+};
+
+Object.defineProperty(window, 'sessionStorage', {
+  value: fakeStorage,
+  writable: true,
+});
+
+describe('ProblemTimerWidget utility functions', () => {
+  beforeEach(() => {
+    fakeStorage.clear();
+  });
+
+  it('formats milliseconds to MM:SS and HH:MM:SS correctly', () => {
+    expect(formatTime(0)).toBe('00:00');
+    expect(formatTime(5_000)).toBe('00:05');
+    expect(formatTime(65_000)).toBe('01:05');
+    expect(formatTime(600_000)).toBe('10:00');
+    expect(formatTime(3_600_000)).toBe('01:00:00');
+    expect(formatTime(3_665_000)).toBe('01:01:05');
+  });
+
+  it('loads default state when no storage exists', () => {
+    const state = loadStoredTimer('1234-A');
+    expect(state.problemKey).toBe('1234-A');
+    expect(state.elapsedMs).toBe(0);
+    expect(state.runningSince).toBeNull();
+    expect(state.mode).toBe('countdown');
+    expect(state.countdownLimitMinutes).toBe(20);
+  });
+
+  it('saves and reloads state from storage', () => {
+    saveStoredTimer({
+      problemKey: '1234-B',
+      elapsedMs: 15_000,
+      runningSince: 1_700_000_000,
+      mode: 'stopwatch',
+      countdownLimitMinutes: 30,
+      alertAcknowledged: false,
+    });
+    const loaded = loadStoredTimer('1234-B');
+    expect(loaded.elapsedMs).toBe(15_000);
+    expect(loaded.mode).toBe('stopwatch');
+    expect(loaded.countdownLimitMinutes).toBe(30);
+  });
+});
+
+describe('ProblemTimerWidget component rendering', () => {
+  let root: Root | null = null;
+  let container: HTMLDivElement | null = null;
+
+  beforeEach(() => {
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+    fakeStorage.clear();
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+  });
+
+  afterEach(async () => {
+    if (root) {
+      await act(async () => root?.unmount());
+      root = null;
+    }
+    if (container) {
+      container.remove();
+      container = null;
+    }
+  });
+
+  it('renders countdown timer initially with 20 minutes target', async () => {
+    await act(async () => {
+      root!.render(<ProblemTimerWidget problemKey="100-A" />);
+    });
+    expect(container!.textContent).toContain('Thinking Countdown');
+    expect(container!.textContent).toContain('20:00');
+    expect(container!.querySelector('[data-testid="timer-start-btn"]')).not.toBeNull();
+  });
+
+  it('starts, pauses, and updates elapsed time', async () => {
+    vi.useFakeTimers();
+    const onTimeUpdate = vi.fn();
+
+    await act(async () => {
+      root!.render(<ProblemTimerWidget problemKey="100-B" onTimeUpdate={onTimeUpdate} />);
+    });
+
+    const startBtn = container!.querySelector('[data-testid="timer-start-btn"]') as HTMLButtonElement;
+    await act(async () => {
+      startBtn.click();
+    });
+
+    expect(container!.querySelector('[data-testid="timer-pause-btn"]')).not.toBeNull();
+
+    // Advance 5 seconds
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+    });
+
+    const pauseBtn = container!.querySelector('[data-testid="timer-pause-btn"]') as HTMLButtonElement;
+    await act(async () => {
+      pauseBtn.click();
+    });
+
+    expect(container!.querySelector('[data-testid="timer-start-btn"]')).not.toBeNull();
+
+    const stored = loadStoredTimer('100-B');
+    expect(stored.runningSince).toBeNull();
+    expect(stored.elapsedMs).toBeGreaterThanOrEqual(5000);
+
+    vi.useRealTimers();
+  });
+
+  it('switches between Countdown and Stopwatch mode', async () => {
+    await act(async () => {
+      root!.render(<ProblemTimerWidget problemKey="100-C" />);
+    });
+
+    expect(container!.textContent).toContain('Thinking Countdown');
+
+    // Click switch mode button
+    const toggleBtn = container!.querySelector('.cf-timer-toggle-btn') as HTMLButtonElement;
+    await act(async () => {
+      toggleBtn.click();
+    });
+
+    expect(container!.textContent).toContain('Practice Stopwatch');
+    expect(container!.querySelector('[data-testid="timer-digits"]')?.textContent).toBe('00:00');
+
+    // Click again to switch back
+    await act(async () => {
+      toggleBtn.click();
+    });
+    expect(container!.textContent).toContain('Thinking Countdown');
+  });
+
+  it('shows thinking limit alert when countdown reaches zero', async () => {
+    fakeStorage.setItem(
+      getTimerStorageKey('100-D'),
+      JSON.stringify({
+        problemKey: '100-D',
+        elapsedMs: 15 * 60 * 1000 + 1000,
+        runningSince: null,
+        mode: 'countdown',
+        countdownLimitMinutes: 15,
+        alertAcknowledged: false,
+      })
+    );
+
+    await act(async () => {
+      root!.render(<ProblemTimerWidget problemKey="100-D" />);
+    });
+
+    expect(container!.querySelector('[data-testid="timer-alert-box"]')).not.toBeNull();
+    expect(container!.textContent).toContain('Hết thời gian suy nghĩ độc lập');
+
+    // Snooze 5 minutes
+    const snoozeBtn = container!.querySelector('.cf-timer-btn-snooze') as HTMLButtonElement;
+    await act(async () => {
+      snoozeBtn.click();
+    });
+
+    expect(container!.querySelector('[data-testid="timer-alert-box"]')).toBeNull();
+    expect(container!.querySelector('[data-testid="timer-digits"]')?.textContent).toBe('04:59');
+  });
+});
