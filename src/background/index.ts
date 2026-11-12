@@ -90,11 +90,21 @@ async function handleRequest(message: ExtensionRequest): Promise<ExtensionRespon
 
 if (api) {
   // Register synchronously so messages can wake the MV3 event background.
-  api.runtime.onMessage.addListener((message: unknown, sender: { id?: string }) => {
+  const onMessage = (message: unknown, sender: { id?: string }, sendResponse: (response: ExtensionResponse) => void) => {
     if (!message || typeof message !== 'object' || !('type' in message) || message.type !== 'CFCHART_REQUEST') return undefined;
     if (sender.id && sender.id !== api.runtime.id) return undefined;
-    return handleRequest(message as ExtensionRequest);
-  });
+    // Chrome MV3 does not reliably keep the channel open for a returned Promise.
+    // The callback form works in both Chrome and Firefox.
+    void handleRequest(message as ExtensionRequest).then(sendResponse, error => {
+      sendResponse({
+        ok: false,
+        error: error instanceof Error ? error.message : 'CFChart could not load this data. Retry shortly.',
+        code: 'request_failed',
+      } satisfies ExtensionResponse);
+    });
+    return true;
+  };
+  api.runtime.onMessage.addListener(onMessage as Parameters<typeof api.runtime.onMessage.addListener>[0]);
   api.alarms.onAlarm.addListener(alarm => {
     if (alarm.name === ALARM) void refreshHabitStatus(true).catch(console.warn);
   });
