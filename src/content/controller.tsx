@@ -4,6 +4,7 @@ import { getPreferences, updatePreferences, detectViewer, subscribeToChanges, ge
 import { TopBarHabitPill } from './components/TopBarHabitPill';
 import { ProfileHorizonCard } from './components/ProfileHorizonCard';
 import { ProblemVerdictBar } from './components/ProblemVerdictBar';
+import { ProblemTimerWidget } from './components/ProblemTimerWidget';
 import { headerAnchor, profileAnchor, profileHandle, ratingGraph, preserveNativeGraph, viewerHandle, parseProblemPath, problemHeaderAnchor, hasAcceptedVerdictInPage } from './dom';
 import type { PracticeLedger } from '../recommender/types';
 import contentStyles from './content.css';
@@ -88,59 +89,62 @@ export function startCFChart() {
     }
 
     const problemInfo = parseProblemPath(location.pathname);
-    if (problemInfo && preferences.personalHandle) {
-      const userHandle = preferences.personalHandle;
+    if (problemInfo) {
+      const userHandle = preferences.personalHandle ?? '';
       const problemKeyStr = `${problemInfo.contestId}-${problemInfo.index}`;
-      if (observedProblemKey === problemKeyStr && observedProblemHandle === userHandle && problemBar?.host.isConnected) {
-        return;
-      }
-      const isPageAccepted = hasAcceptedVerdictInPage(document);
-      Promise.all([
-        getPractice(userHandle).catch(() => null),
-        (exportPracticeData(userHandle) as Promise<{ ledger?: PracticeLedger } | null>).catch(() => null),
-      ]).then(([practice, data]) => {
-        if (disposed) return;
-        const isHistoryAccepted = practice?.submissions.some(
-          s => s.verdict === 'OK' && s.problem?.contestId === problemInfo.contestId && s.problem?.index?.toUpperCase() === problemInfo.index
-        );
-        const isAccepted = isPageAccepted || Boolean(isHistoryAccepted);
-        if (!isAccepted) {
-          removeProblemBar();
-          return;
-        }
-        const existingEvent = data?.ledger?.events?.find(
-          e => e.problemKey === problemKeyStr && e.provenance === 'self-report'
-        );
-        const initialOutcome = existingEvent?.outcome === 'assisted' ? 'assisted' : existingEvent?.outcome === 'independent' ? 'independent' : null;
-        const anchor = problemHeaderAnchor(document);
-        if (!anchor) {
-          removeProblemBar();
-          return;
-        }
-        if (!problemBar || !problemBar.host.isConnected || observedProblemKey !== problemKeyStr) {
-          problemBar?.root.unmount();
-          problemBar?.host.remove();
-          problemBar = createMount('cfchart-problem-host');
-          problemBar.host.style.cssText = 'display:block;margin:6px 0;text-align:left;';
-          if (anchor.classList.contains('title')) {
-            anchor.after(problemBar.host);
-          } else {
-            anchor.append(problemBar.host);
+      const anchor = problemHeaderAnchor(document);
+      if (!anchor) {
+        removeProblemBar();
+      } else {
+        const isPageAccepted = hasAcceptedVerdictInPage(document);
+        const checkAccepted = userHandle
+          ? Promise.all([
+              getPractice(userHandle).catch(() => null),
+              (exportPracticeData(userHandle) as Promise<{ ledger?: PracticeLedger } | null>).catch(() => null),
+            ])
+          : Promise.resolve([null, null] as const);
+
+        checkAccepted.then(([practice, data]) => {
+          if (disposed) return;
+          const isHistoryAccepted = practice?.submissions.some(
+            s => s.verdict === 'OK' && s.problem?.contestId === problemInfo.contestId && s.problem?.index?.toUpperCase() === problemInfo.index
+          );
+          const isAccepted = isPageAccepted || Boolean(isHistoryAccepted);
+          const existingEvent = data?.ledger?.events?.find(
+            e => e.problemKey === problemKeyStr && e.provenance === 'self-report'
+          );
+          const initialOutcome = existingEvent?.outcome === 'assisted' ? 'assisted' : existingEvent?.outcome === 'independent' ? 'independent' : null;
+
+          if (!problemBar || !problemBar.host.isConnected || observedProblemKey !== problemKeyStr) {
+            problemBar?.root.unmount();
+            problemBar?.host.remove();
+            problemBar = createMount('cfchart-problem-host');
+            problemBar.host.style.cssText = 'display:block;margin:6px 0;text-align:left;';
+            if (anchor.classList.contains('title')) {
+              anchor.after(problemBar.host);
+            } else {
+              anchor.append(problemBar.host);
+            }
+            observedProblemKey = problemKeyStr;
+            observedProblemHandle = userHandle;
           }
-          observedProblemKey = problemKeyStr;
-          observedProblemHandle = userHandle;
-        }
-        problemBar.root.render(
-          <RenderBoundary>
-            <ProblemVerdictBar
-              handle={userHandle}
-              contestId={problemInfo.contestId}
-              index={problemInfo.index}
-              initialOutcome={initialOutcome}
-            />
-          </RenderBoundary>
-        );
-      });
+          problemBar.root.render(
+            <RenderBoundary>
+              <div className="cf-problem-area">
+                <ProblemTimerWidget problemKey={problemKeyStr} />
+                {isAccepted && userHandle && (
+                  <ProblemVerdictBar
+                    handle={userHandle}
+                    contestId={problemInfo.contestId}
+                    index={problemInfo.index}
+                    initialOutcome={initialOutcome}
+                  />
+                )}
+              </div>
+            </RenderBoundary>
+          );
+        });
+      }
     } else {
       removeProblemBar();
     }

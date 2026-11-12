@@ -145,4 +145,23 @@ describe('in-page content integration', () => {
       outcome: 'assisted',
     }));
   });
+  it('renders ProblemTimerWidget on problem page even if unaccepted', async () => {
+    history.replaceState({}, '', '/problemset/problem/2000/C');
+    document.body.innerHTML = `
+      <div id="header"><div class="lang-chooser"><a href="/profile/myHandle">myHandle</a></div></div>
+      <div id="pageContent">
+        <div class="problem-statement">
+          <div class="header">
+            <div class="title">C. Unsolved Problem</div>
+          </div>
+        </div>
+      </div>
+    `;
+    await start();
+    const problemHost = document.getElementById('cfchart-problem-host');
+    expect(problemHost).not.toBeNull();
+    const shadowEl = problemHost!.shadowRoot!;
+    expect(shadowEl.textContent).toContain('Thinking Countdown');
+    expect(shadowEl.textContent).not.toContain('Solved');
+  });
 });

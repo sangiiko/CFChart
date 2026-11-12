@@ -8,3 +8,45 @@
 .cf-problem-verdict-bar{display:inline-flex;align-items:center;gap:8px;margin:8px 0;flex-wrap:wrap}.cf-verdict-btn{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border:1px solid #cedbe8;border-radius:15px;background:#fff;color:#475569;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s ease}.cf-verdict-btn:hover{background:#f1f5f9;border-color:#94a3b8}.cf-verdict-btn.is-solved{background:#ecfdf5;border-color:#10b981;color:#047857;font-weight:600}.cf-verdict-btn.is-assisted{background:#fffbeb;border-color:#f59e0b;color:#b45309;font-weight:600}.cf-verdict-status{font-size:11px;color:#059669;margin-left:4px}
 
 .cf-solved-row{display:flex;align-items:center;gap:8px;margin-top:5px;padding:8px 9px;background:#f5f8fb;border-radius:4px}.cf-solved-row>a{display:flex;align-items:center;justify-content:space-between;gap:12px;flex:1;min-width:0;font-size:11px}.cf-solved-row>a>span:first-child{overflow-wrap:anywhere}.cf-remove-solve{display:flex;align-items:center;justify-content:center;padding:6px;border:0;border-radius:4px;background:transparent;color:#788797;cursor:pointer}.cf-remove-solve:hover{background:#fdeaea;color:#b42318}.cf-remove-solve:focus-visible{outline:2px solid #4580b7}.cf-remove-solve:disabled{opacity:.5;cursor:wait}
+
+/* Problem Practice Timer & Countdown Card */
+.cf-problem-area{display:flex;flex-direction:column;gap:8px;margin:8px 0;width:100%}
+.cf-timer-card{background:#ffffff;border:1px solid #d0dbe7;border-radius:8px;padding:10px 14px;box-shadow:0 1px 3px rgba(32,56,85,0.06);transition:all .2s ease}
+.cf-timer-card.is-alarm{border-color:#f59e0b;background:#fffbeb;box-shadow:0 0 0 2px rgba(245,158,11,0.2)}
+.cf-timer-card.is-collapsed{padding:6px 14px}
+.cf-timer-header{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.cf-timer-title-group{display:flex;align-items:center;gap:8px}
+.cf-timer-icon{font-size:16px}
+.cf-timer-heading{font-size:12px;font-weight:700;color:#2c3e50}
+.cf-timer-badge{font-size:10px;font-weight:600;padding:1px 6px;border-radius:10px}
+.cf-timer-badge.is-running{background:#ecfdf5;color:#059669;border:1px solid #a7f3d0}
+.cf-timer-badge.is-paused{background:#f1f5f9;color:#64748b;border:1px solid #cbd5e1}
+.cf-timer-controls-right{display:flex;align-items:center;gap:6px}
+.cf-timer-toggle-btn{background:transparent;border:0;color:#245c96;font-size:11px;font-weight:600;cursor:pointer;padding:2px 6px;border-radius:4px}
+.cf-timer-toggle-btn:hover{background:#edf4fb;text-decoration:underline}
+.cf-timer-icon-btn{background:transparent;border:0;color:#718096;font-size:12px;cursor:pointer;padding:2px 5px}
+.cf-timer-body{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+.cf-timer-display-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.cf-timer-digits{font-family:'Courier New',Courier,monospace;font-size:26px;font-weight:700;letter-spacing:1px;color:#1e293b}
+.cf-timer-actions{display:flex;align-items:center;gap:6px}
+.cf-timer-btn{font-size:11px;font-weight:600;padding:5px 12px;border-radius:5px;cursor:pointer;border:1px solid transparent;transition:all .15s ease}
+.cf-timer-btn-primary{background:#245c96;color:#fff}
+.cf-timer-btn-primary:hover{background:#1a4570}
+.cf-timer-btn-pause{background:#f1f5f9;border-color:#cbd5e1;color:#334155}
+.cf-timer-btn-pause:hover{background:#e2e8f0}
+.cf-timer-btn-secondary{background:transparent;border-color:#cbd5e1;color:#64748b}
+.cf-timer-btn-secondary:hover{background:#f1f5f9;color:#334155}
+.cf-timer-btn-snooze{background:#f59e0b;color:#fff;border-color:#d97706}
+.cf-timer-btn-snooze:hover{background:#d97706}
+.cf-timer-options{display:flex;align-items:center;gap:8px;font-size:11px;color:#64748b;flex-wrap:wrap}
+.cf-timer-label{font-weight:600}
+.cf-timer-presets{display:flex;gap:4px}
+.cf-timer-pill{background:#f8fafc;border:1px solid #cbd5e1;border-radius:12px;padding:1px 8px;font-size:10px;font-weight:600;color:#475569;cursor:pointer}
+.cf-timer-pill.is-active{background:#245c96;border-color:#245c96;color:#fff}
+.cf-timer-custom-label{font-size:10px;color:#64748b}
+.cf-timer-select{font-size:11px;padding:2px 6px;border-radius:4px}
+.cf-timer-footer-info{display:flex;gap:16px;font-size:11px;color:#64748b;border-top:1px dashed #e2e8f0;padding-top:6px}
+.cf-timer-alert-box{margin-top:6px;background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:8px 12px}
+.cf-timer-alert-title{font-size:12px;font-weight:700;color:#c2410c}
+.cf-timer-alert-msg{font-size:11px;color:#7c2d12;margin:4px 0}
+.cf-timer-alert-actions{display:flex;gap:8px;margin-top:6px}
