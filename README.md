@@ -43,7 +43,27 @@ CFChart is a browser extension for **Firefox** and **Chromium-based browsers** (
 
 ## Installation
 
-### Firefox (Recommended)
+### ⚡ 1-Line Quick Install (Linux, macOS, Windows)
+
+Install automatically across all supported browsers (Firefox, Zen, LibreWolf, Floorp, Chrome, Brave, Edge):
+
+* **Linux / macOS / Git Bash:**
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/sangiiko/CFChart/main/install.sh | bash
+  ```
+
+* **Windows (PowerShell):**
+  ```powershell
+  irm https://raw.githubusercontent.com/sangiiko/CFChart/main/install.ps1 | iex
+  ```
+
+*The installer automatically detects your browser profiles, installs the extension, configures signature bypass, and prepares unpacked Chrome assets.*
+
+---
+
+### Manual Installation
+
+#### Firefox (Recommended)
 
 #### Option A: Automatic Updates via `.xpi` (Permanent)
 1. Download `cfchart.xpi` from the [Latest Release](https://github.com/sangiiko/CFChart/releases/latest).
