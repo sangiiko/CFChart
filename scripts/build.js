@@ -50,6 +50,13 @@ try {
   throw new Error('Could not create cfchart.xpi', { cause: error });
 }
 
+// Package Chrome .zip
+try {
+  execFileSync('zip', ['-r', '-FS', '-q', resolve('cfchart-chrome.zip'), '.'], { cwd: resolve('dist-chrome'), stdio: 'inherit' });
+} catch (error) {
+  throw new Error('Could not create cfchart-chrome.zip', { cause: error });
+}
+
 console.log('\nCFChart is ready.\n- For Firefox: Load dist/manifest.json in about:debugging or install cfchart.xpi\n- For Chrome / Brave / Edge: Load dist-chrome/ as Unpacked Extension in chrome://extensions');
 
 // Publish this feed alongside the exact XPI whose hash it describes.

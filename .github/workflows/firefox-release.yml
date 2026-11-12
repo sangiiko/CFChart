@@ -33,7 +33,7 @@ jobs:
             echo "Release $TAG already exists. Bump both package and manifest versions for another update."
             exit 0
           fi
-          gh release create "$TAG" cfchart.xpi updates.json \
+          gh release create "$TAG" cfchart.xpi cfchart-chrome.zip updates.json \
             --target "$GITHUB_SHA" --title "CFChart $VERSION" \
             --notes "Firefox update package. For initial installation, download cfchart.xpi and use about:addons → Install Add-on From File. Future versions update automatically." \
             --latest
