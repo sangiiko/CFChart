@@ -22,6 +22,23 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class FixtureHandler(BaseHTTPRequestHandler):
     def do_GET(self):
+        if self.path.startswith('/problemset/problem/'):
+            html = '''<!doctype html><html><head><title>Codeforces problem fixture</title><style>
+            body{margin:24px auto;max-width:1000px;background:#fff;color:#222;font:13px Arial}
+            #header{height:70px;border-bottom:1px solid #ddd}.lang-chooser{float:right}
+            #pageContent{width:760px;max-width:100%}.problem-statement{padding:20px;border:1px solid #ddd;margin-top:24px}
+            .problem-statement .title{text-align:center;font-size:18px;font-weight:bold}
+            </style></head><body><div id="header"><strong style="font-size:28px">Codeforces</strong>
+            <div class="lang-chooser"><a href="/profile/practice_user">practice_user</a></div></div>
+            <div id="pageContent"><div class="problem-statement"><div class="header"><div class="title">C. Practice problem</div></div>
+            <p>Find the answer to the problem.</p></div></div></body></html>'''
+            data = html.encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.send_header('Content-Length', str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
         native = '' if 'unrated_user' in self.path else '<div id="userRatingGraphHolder" class="roundbox"><h2>Native rating graph</h2><div id="placeholder">Native chart fixture</div></div>'
         html = f'''<!doctype html><html><head><title>Codeforces profile fixture</title><style>
         body{{margin:24px auto;max-width:1000px;background:white;color:#222;font:13px Arial}}
@@ -63,6 +80,7 @@ globalThis.fetch = async function(input) {
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=ROOT / 'artifacts')
+    parser.add_argument('--timer-only', action='store_true', help='Inspect the packaged problem timer without the profile checks')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault('SE_CACHE_PATH', str(Path(tempfile.gettempdir()) / 'cfchart-selenium'))
@@ -105,6 +123,30 @@ def main():
             def shadow(script):
                 return driver.execute_script(script)
 
+            def check_timer():
+                driver.set_window_size(1280, 900)
+                driver.get(origin + '/problemset/problem/2000/C')
+                wait.until(lambda _: shadow("return document.querySelector('#cfchart-problem-host')?.shadowRoot?.querySelector('[data-testid=problem-timer-widget]') != null"))
+                assert shadow("return document.querySelector('#cfchart-problem-host').shadowRoot.querySelector('[data-testid=timer-digits]').textContent") == '20:00'
+                driver.save_screenshot(str(args.output / 'timer-expanded.png'))
+                shadow("document.querySelector('#cfchart-problem-host').shadowRoot.querySelector('[aria-label=\"Timer settings\"]').click()")
+                driver.save_screenshot(str(args.output / 'timer-settings.png'))
+                shadow("document.querySelector('#cfchart-problem-host').shadowRoot.querySelector('[aria-label=\"Timer settings\"]').click()")
+                shadow("document.querySelector('#cfchart-problem-host').shadowRoot.querySelector('[aria-label=\"Collapse timer\"]').click()")
+                assert shadow("return document.querySelector('#cfchart-problem-host').shadowRoot.querySelector('[data-testid=timer-digits]').textContent") == '20:00'
+                driver.save_screenshot(str(args.output / 'timer-collapsed.png'))
+                shadow("document.querySelector('#cfchart-problem-host').shadowRoot.querySelector('[aria-label=\"Expand timer\"]').click()")
+                driver.set_window_size(420, 900)
+                shadow("document.querySelector('#pageContent').style.width='300px'")
+                assert shadow("return document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+                driver.save_screenshot(str(args.output / 'timer-narrow.png'))
+                results.append('Problem timer renders in the packaged extension; collapsed view keeps its clock.')
+
+            if args.timer_only:
+                check_timer()
+                print(json.dumps({'checks': results, 'screenshots': ['timer-expanded.png', 'timer-settings.png', 'timer-collapsed.png', 'timer-narrow.png']}, indent=2))
+                return
+
             wait.until(lambda _: shadow("return document.querySelector('#cfchart-profile-host')?.shadowRoot?.querySelector('svg') != null"))
             wait.until(lambda _: shadow("return document.querySelector('#cfchart-personal-host')?.shadowRoot?.textContent.includes('Today 2/2')"))
             assert shadow("return document.querySelectorAll('#cfchart-profile-host').length") == 1
@@ -145,6 +187,7 @@ def main():
             results.append('Unrated profile has no fictional rating/scenario; missing ML model is disclosed.')
             driver.set_window_size(720, 900)
             driver.save_screenshot(str(args.output / 'narrow.png'))
+            check_timer()
             report = {'environment': 'Headless Firefox with installed packaged extension; localhost DOM fixture and mocked Codeforces API', 'checks': results, 'liveSite': 'Not established: public profile access returned a Cloudflare challenge.'}
             (args.output / 'browser-smoke.json').write_text(json.dumps(report, indent=2) + '\n')
             print(json.dumps(report, indent=2))

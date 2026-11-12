@@ -89,7 +89,15 @@ export const ProblemTimerWidget: React.FC<Props> = ({ problemKey, onTimeUpdate }
   const [timer, setTimer] = useState<StoredTimerState>(() => loadStoredTimer(problemKey));
   const [now, setNow] = useState<number>(Date.now());
   const [collapsed, setCollapsed] = useState(false);
-  const countdownSelectId = useId();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customMinutes, setCustomMinutes] = useState('20');
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [announcement, setAnnouncement] = useState('');
+  const settingsId = useId();
+  const customId = useId();
+  const settingsRef = useRef<HTMLDivElement>(null);
+  const previousTimeUp = useRef(false);
 
   // Keep a ref to the latest state so unmount / background interval always writes current state
   const stateRef = useRef(timer);
@@ -99,7 +107,23 @@ export const ProblemTimerWidget: React.FC<Props> = ({ problemKey, onTimeUpdate }
     // When problemKey changes, reload state
     const loaded = loadStoredTimer(problemKey);
     setTimer(loaded);
+    setSettingsOpen(false);
+    setCustomOpen(false);
+    setConfirmReset(false);
+    previousTimeUp.current = false;
   }, [problemKey]);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!event.composedPath().includes(settingsRef.current as EventTarget)) {
+        setSettingsOpen(false);
+        setConfirmReset(false);
+      }
+    };
+    document.addEventListener('pointerdown', closeOnOutsideClick);
+    return () => document.removeEventListener('pointerdown', closeOnOutsideClick);
+  }, [settingsOpen]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -119,11 +143,24 @@ export const ProblemTimerWidget: React.FC<Props> = ({ problemKey, onTimeUpdate }
 
   const isRunning = timer.runningSince !== null;
   const currentElapsedMs =
-    timer.elapsedMs + (isRunning && timer.runningSince ? Math.max(0, now - timer.runningSince) : 0);
+    timer.elapsedMs + (isRunning ? Math.max(0, now - timer.runningSince!) : 0);
 
   const countdownLimitMs = timer.countdownLimitMinutes * 60 * 1000;
   const countdownRemainingMs = Math.max(0, countdownLimitMs - currentElapsedMs);
   const isTimeUp = timer.mode === 'countdown' && currentElapsedMs >= countdownLimitMs;
+  const shownMs = timer.mode === 'countdown' ? countdownRemainingMs : currentElapsedMs;
+  const progress = timer.mode === 'countdown'
+    ? Math.min(100, Math.max(0, Math.round(currentElapsedMs / countdownLimitMs * 100)))
+    : 0;
+  const status = isTimeUp ? 'Over time' : isRunning ? 'Running' : currentElapsedMs > 0 ? 'Paused' : 'Ready';
+  const primaryLabel = isRunning ? 'Pause' : currentElapsedMs > 0 ? 'Resume' : 'Start';
+
+  useEffect(() => {
+    if (isTimeUp && !previousTimeUp.current && !timer.alertAcknowledged) {
+      setAnnouncement('Time limit reached');
+    }
+    previousTimeUp.current = isTimeUp;
+  }, [isTimeUp, timer.alertAcknowledged]);
 
   const handleStart = () => {
     const updated: StoredTimerState = {
@@ -132,10 +169,11 @@ export const ProblemTimerWidget: React.FC<Props> = ({ problemKey, onTimeUpdate }
     };
     setTimer(updated);
     saveStoredTimer(updated);
+    setAnnouncement(currentElapsedMs > 0 ? 'Timer resumed' : 'Timer started');
   };
 
   const handlePause = () => {
-    if (!timer.runningSince) return;
+    if (timer.runningSince === null) return;
     const added = Date.now() - timer.runningSince;
     const updated: StoredTimerState = {
       ...timer,
@@ -144,6 +182,7 @@ export const ProblemTimerWidget: React.FC<Props> = ({ problemKey, onTimeUpdate }
     };
     setTimer(updated);
     saveStoredTimer(updated);
+    setAnnouncement('Timer paused');
   };
 
   const handleReset = () => {
@@ -155,6 +194,9 @@ export const ProblemTimerWidget: React.FC<Props> = ({ problemKey, onTimeUpdate }
     };
     setTimer(updated);
     saveStoredTimer(updated);
+    setConfirmReset(false);
+    setSettingsOpen(false);
+    setAnnouncement('Timer reset');
   };
 
   const handleModeChange = (mode: 'stopwatch' | 'countdown') => {
@@ -164,6 +206,7 @@ export const ProblemTimerWidget: React.FC<Props> = ({ problemKey, onTimeUpdate }
     };
     setTimer(updated);
     saveStoredTimer(updated);
+    setAnnouncement(`${mode === 'countdown' ? 'Countdown' : 'Stopwatch'} selected`);
   };
 
   const handleLimitChange = (minutes: number) => {
@@ -174,6 +217,8 @@ export const ProblemTimerWidget: React.FC<Props> = ({ problemKey, onTimeUpdate }
     };
     setTimer(updated);
     saveStoredTimer(updated);
+    setCustomMinutes(String(minutes));
+    setAnnouncement(`Duration set to ${minutes} minutes`);
   };
 
   const handleAddMinutes = (extraMinutes: number) => {
@@ -184,157 +229,84 @@ export const ProblemTimerWidget: React.FC<Props> = ({ problemKey, onTimeUpdate }
     };
     setTimer(updated);
     saveStoredTimer(updated);
+    setAnnouncement(`${extraMinutes} minutes added`);
   };
 
-  return (
-    <div
-      className={`cf-timer-card ${isTimeUp ? 'is-alarm' : ''} ${collapsed ? 'is-collapsed' : ''}`}
-      aria-label="Practice timer and thinking countdown"
-      data-testid="problem-timer-widget"
-    >
-      <div className="cf-timer-header">
-        <div className="cf-timer-title-group">
-          <span className="cf-timer-icon" aria-hidden="true">⏱️</span>
-          <span className="cf-timer-heading">
-            {timer.mode === 'countdown' ? 'Thinking Countdown' : 'Practice Stopwatch'}
-          </span>
-          <span className={`cf-timer-badge ${isRunning ? 'is-running' : 'is-paused'}`}>
-            {isRunning ? 'Running' : 'Paused'}
-          </span>
-        </div>
+  const handleContinue = () => {
+    const updated = { ...timer, alertAcknowledged: true };
+    setTimer(updated);
+    saveStoredTimer(updated);
+    setAnnouncement('Time limit notice dismissed');
+  };
 
-        <div className="cf-timer-controls-right">
-          <button
-            type="button"
-            className="cf-timer-toggle-btn"
-            onClick={() => handleModeChange(timer.mode === 'countdown' ? 'stopwatch' : 'countdown')}
-            title="Switch between Thinking Countdown and Stopwatch"
-          >
-            {timer.mode === 'countdown' ? 'Switch to Stopwatch' : 'Switch to Countdown'}
-          </button>
-          <button
-            type="button"
-            className="cf-timer-icon-btn"
-            onClick={() => setCollapsed(!collapsed)}
-            title={collapsed ? 'Expand timer' : 'Collapse timer'}
-            aria-label={collapsed ? 'Expand timer' : 'Collapse timer'}
-          >
-            {collapsed ? '▼' : '▲'}
-          </button>
+  const primaryButton = (
+    <button
+      type="button"
+      className="cf-timer-primary"
+      onClick={isRunning ? handlePause : handleStart}
+      data-testid={isRunning ? 'timer-pause-btn' : 'timer-start-btn'}
+    >
+      {primaryLabel}
+    </button>
+  );
+
+  return (
+    <div className={`cf-timer-card${collapsed ? ' is-collapsed' : ''}`} aria-label="Practice timer" data-testid="problem-timer-widget">
+      <div className="cf-timer-header">
+        <span className="cf-timer-heading">Practice timer</span>
+        <div className="cf-timer-header-actions">
+          {!collapsed && <div className="cf-timer-settings-wrap" ref={settingsRef} onKeyDown={(event) => {
+            if (event.key === 'Escape') { setSettingsOpen(false); setConfirmReset(false); }
+          }}>
+            <button type="button" className="cf-timer-icon-btn" aria-label="Timer settings" aria-expanded={settingsOpen} aria-controls={settingsId} onClick={() => setSettingsOpen(!settingsOpen)}>···</button>
+            {settingsOpen && <div className="cf-timer-settings" id={settingsId} aria-label="Timer settings">
+              <div className="cf-timer-setting-label">Mode</div>
+              <div className="cf-timer-choice-row" role="group" aria-label="Timer mode">
+                {(['countdown', 'stopwatch'] as const).map(mode => <button key={mode} type="button" aria-pressed={timer.mode === mode} onClick={() => handleModeChange(mode)}>{mode === 'countdown' ? 'Countdown' : 'Stopwatch'}</button>)}
+              </div>
+              {timer.mode === 'countdown' && <>
+                <div className="cf-timer-setting-label">Duration</div>
+                <div className="cf-timer-choice-row" role="group" aria-label="Countdown duration">
+                  {[15, 20, 30, 45].map(minutes => <button key={minutes} type="button" aria-pressed={timer.countdownLimitMinutes === minutes} onClick={() => handleLimitChange(minutes)}>{minutes} min</button>)}
+                </div>
+                <button type="button" className="cf-timer-text-btn" aria-expanded={customOpen} onClick={() => { setCustomMinutes(String(timer.countdownLimitMinutes)); setCustomOpen(!customOpen); }}>Custom duration</button>
+                {customOpen && <form className="cf-timer-custom" onSubmit={event => {
+                  event.preventDefault();
+                  const minutes = Number(customMinutes);
+                  if (Number.isInteger(minutes) && minutes >= 1 && minutes <= 1440) { handleLimitChange(minutes); setCustomOpen(false); }
+                }}>
+                  <label htmlFor={customId}>Minutes</label>
+                  <input id={customId} type="number" min="1" max="1440" required value={customMinutes} onChange={event => setCustomMinutes(event.target.value)} />
+                  <button type="submit">Apply</button>
+                </form>}
+              </>}
+              <div className="cf-timer-settings-divider" />
+              {confirmReset ? <div className="cf-timer-reset-confirm">
+                <span>Reset elapsed time?</span>
+                <button type="button" onClick={handleReset} data-testid="timer-confirm-reset-btn">Reset</button>
+                <button type="button" onClick={() => setConfirmReset(false)}>Cancel</button>
+              </div> : <button type="button" className="cf-timer-text-btn" onClick={() => currentElapsedMs > 60_000 ? setConfirmReset(true) : handleReset()} data-testid="timer-reset-btn">Reset timer</button>}
+            </div>}
+          </div>}
+          <button type="button" className="cf-timer-icon-btn cf-timer-collapse" aria-label={collapsed ? 'Expand timer' : 'Collapse timer'} aria-expanded={!collapsed} onClick={() => { setCollapsed(!collapsed); setSettingsOpen(false); }}>{collapsed ? '⌄' : '⌃'}</button>
         </div>
       </div>
-
-      {!collapsed && (
-        <div className="cf-timer-body">
-          <div className="cf-timer-display-row">
-            <div className="cf-timer-digits" data-testid="timer-digits">
-              {timer.mode === 'countdown'
-                ? formatTime(countdownRemainingMs)
-                : formatTime(currentElapsedMs)}
-            </div>
-
-            <div className="cf-timer-actions">
-              {!isRunning ? (
-                <button
-                  type="button"
-                  className="cf-timer-btn cf-timer-btn-primary"
-                  onClick={handleStart}
-                  data-testid="timer-start-btn"
-                >
-                  ▶ Start
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="cf-timer-btn cf-timer-btn-pause"
-                  onClick={handlePause}
-                  data-testid="timer-pause-btn"
-                >
-                  ⏸ Pause
-                </button>
-              )}
-              <button
-                type="button"
-                className="cf-timer-btn cf-timer-btn-secondary"
-                onClick={handleReset}
-                data-testid="timer-reset-btn"
-              >
-                ↺ Reset
-              </button>
-            </div>
-          </div>
-
-          {timer.mode === 'countdown' && (
-            <div className="cf-timer-options">
-              <span className="cf-timer-label">Thinking limit:</span>
-              <div className="cf-timer-presets" role="group" aria-label="Quick preset limits">
-                {[15, 20, 30, 45].map((mins) => (
-                  <button
-                    key={mins}
-                    type="button"
-                    className={`cf-timer-pill ${
-                      timer.countdownLimitMinutes === mins ? 'is-active' : ''
-                    }`}
-                    onClick={() => handleLimitChange(mins)}
-                  >
-                    {mins}m
-                  </button>
-                ))}
-              </div>
-              <label htmlFor={countdownSelectId} className="cf-timer-custom-label">
-                Custom:
-              </label>
-              <select
-                id={countdownSelectId}
-                className="cf-timer-select"
-                value={timer.countdownLimitMinutes}
-                onChange={(e) => handleLimitChange(Number(e.target.value))}
-                aria-label="Thinking limit dropdown"
-              >
-                {[10, 15, 20, 25, 30, 40, 45, 60].map((m) => (
-                  <option key={m} value={m}>
-                    {m} mins
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          <div className="cf-timer-footer-info">
-            <span>Total elapsed: <strong>{formatTime(currentElapsedMs)}</strong></span>
-            {timer.mode === 'countdown' && (
-              <span>Target: <strong>{timer.countdownLimitMinutes} mins</strong></span>
-            )}
-          </div>
-
-          {isTimeUp && (
-            <div className="cf-timer-alert-box" role="alert" data-testid="timer-alert-box">
-              <div className="cf-timer-alert-title">
-                ⚠️ Hết thời gian suy nghĩ độc lập ({timer.countdownLimitMinutes} phút)!
-              </div>
-              <div className="cf-timer-alert-msg">
-                Bạn đã suy nghĩ hết giới hạn định trước. Để tối ưu hiệu quả luyện tập và không bị sa đà, hãy cân nhắc đọc <strong>Hint</strong>, xem <strong>Editorial</strong> hoặc chuyển hướng tiếp cận bài toán.
-              </div>
-              <div className="cf-timer-alert-actions">
-                <button
-                  type="button"
-                  className="cf-timer-btn cf-timer-btn-snooze"
-                  onClick={() => handleAddMinutes(5)}
-                >
-                  +5 phút nữa
-                </button>
-                <button
-                  type="button"
-                  className="cf-timer-btn cf-timer-btn-secondary"
-                  onClick={() => handleModeChange('stopwatch')}
-                >
-                  Tiếp tục với Stopwatch
-                </button>
-              </div>
-            </div>
-          )}
+      <div className="cf-timer-main">
+        <div className="cf-timer-clock">
+          <span className="cf-timer-digits" data-testid="timer-digits" role="timer" aria-label={timer.mode === 'countdown' ? `${Math.floor(shownMs / 60_000)} minutes ${Math.floor(shownMs % 60_000 / 1000)} seconds remaining` : `${Math.floor(shownMs / 60_000)} minutes ${Math.floor(shownMs % 60_000 / 1000)} seconds elapsed`}>{formatTime(shownMs)}</span>
+          <span className="cf-timer-clock-caption">{timer.mode === 'countdown' ? `Countdown · ${timer.countdownLimitMinutes} min` : 'Stopwatch'} <span aria-hidden="true">·</span> {status}</span>
         </div>
-      )}
+        {primaryButton}
+      </div>
+      {!collapsed && timer.mode === 'countdown' && <div className="cf-timer-progress" role="progressbar" aria-label="Countdown elapsed" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} aria-valuetext={`${progress}% of time elapsed`}><span style={{ width: `${progress}%` }} /></div>}
+      {!collapsed && isTimeUp && !timer.alertAcknowledged && <div className="cf-timer-alert-box" data-testid="timer-alert-box">
+        <span><strong>Time limit reached.</strong> Take a hint or continue when you're ready.</span>
+        <div className="cf-timer-alert-actions">
+          <button type="button" onClick={() => handleAddMinutes(5)} className="cf-timer-text-btn cf-timer-btn-snooze">+5 min</button>
+          <button type="button" onClick={handleContinue} className="cf-timer-text-btn">Continue</button>
+        </div>
+      </div>}
+      <span className="cf-timer-sr-only" aria-live="polite" aria-atomic="true">{announcement}</span>
     </div>
   );
 };

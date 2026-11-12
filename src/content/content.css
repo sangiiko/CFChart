@@ -9,44 +9,50 @@
 
 .cf-solved-row{display:flex;align-items:center;gap:8px;margin-top:5px;padding:8px 9px;background:#f5f8fb;border-radius:4px}.cf-solved-row>a{display:flex;align-items:center;justify-content:space-between;gap:12px;flex:1;min-width:0;font-size:11px}.cf-solved-row>a>span:first-child{overflow-wrap:anywhere}.cf-remove-solve{display:flex;align-items:center;justify-content:center;padding:6px;border:0;border-radius:4px;background:transparent;color:#788797;cursor:pointer}.cf-remove-solve:hover{background:#fdeaea;color:#b42318}.cf-remove-solve:focus-visible{outline:2px solid #4580b7}.cf-remove-solve:disabled{opacity:.5;cursor:wait}
 
-/* Problem Practice Timer & Countdown Card */
-.cf-problem-area{display:flex;flex-direction:column;gap:8px;margin:8px 0;width:100%}
-.cf-timer-card{background:#ffffff;border:1px solid #d0dbe7;border-radius:8px;padding:10px 14px;box-shadow:0 1px 3px rgba(32,56,85,0.06);transition:all .2s ease}
-.cf-timer-card.is-alarm{border-color:#f59e0b;background:#fffbeb;box-shadow:0 0 0 2px rgba(245,158,11,0.2)}
-.cf-timer-card.is-collapsed{padding:6px 14px}
-.cf-timer-header{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.cf-timer-title-group{display:flex;align-items:center;gap:8px}
-.cf-timer-icon{font-size:16px}
-.cf-timer-heading{font-size:12px;font-weight:700;color:#2c3e50}
-.cf-timer-badge{font-size:10px;font-weight:600;padding:1px 6px;border-radius:10px}
-.cf-timer-badge.is-running{background:#ecfdf5;color:#059669;border:1px solid #a7f3d0}
-.cf-timer-badge.is-paused{background:#f1f5f9;color:#64748b;border:1px solid #cbd5e1}
-.cf-timer-controls-right{display:flex;align-items:center;gap:6px}
-.cf-timer-toggle-btn{background:transparent;border:0;color:#245c96;font-size:11px;font-weight:600;cursor:pointer;padding:2px 6px;border-radius:4px}
-.cf-timer-toggle-btn:hover{background:#edf4fb;text-decoration:underline}
-.cf-timer-icon-btn{background:transparent;border:0;color:#718096;font-size:12px;cursor:pointer;padding:2px 5px}
-.cf-timer-body{margin-top:10px;display:flex;flex-direction:column;gap:8px}
-.cf-timer-display-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.cf-timer-digits{font-family:'Courier New',Courier,monospace;font-size:26px;font-weight:700;letter-spacing:1px;color:#1e293b}
-.cf-timer-actions{display:flex;align-items:center;gap:6px}
-.cf-timer-btn{font-size:11px;font-weight:600;padding:5px 12px;border-radius:5px;cursor:pointer;border:1px solid transparent;transition:all .15s ease}
-.cf-timer-btn-primary{background:#245c96;color:#fff}
-.cf-timer-btn-primary:hover{background:#1a4570}
-.cf-timer-btn-pause{background:#f1f5f9;border-color:#cbd5e1;color:#334155}
-.cf-timer-btn-pause:hover{background:#e2e8f0}
-.cf-timer-btn-secondary{background:transparent;border-color:#cbd5e1;color:#64748b}
-.cf-timer-btn-secondary:hover{background:#f1f5f9;color:#334155}
-.cf-timer-btn-snooze{background:#f59e0b;color:#fff;border-color:#d97706}
-.cf-timer-btn-snooze:hover{background:#d97706}
-.cf-timer-options{display:flex;align-items:center;gap:8px;font-size:11px;color:#64748b;flex-wrap:wrap}
-.cf-timer-label{font-weight:600}
-.cf-timer-presets{display:flex;gap:4px}
-.cf-timer-pill{background:#f8fafc;border:1px solid #cbd5e1;border-radius:12px;padding:1px 8px;font-size:10px;font-weight:600;color:#475569;cursor:pointer}
-.cf-timer-pill.is-active{background:#245c96;border-color:#245c96;color:#fff}
-.cf-timer-custom-label{font-size:10px;color:#64748b}
-.cf-timer-select{font-size:11px;padding:2px 6px;border-radius:4px}
-.cf-timer-footer-info{display:flex;gap:16px;font-size:11px;color:#64748b;border-top:1px dashed #e2e8f0;padding-top:6px}
-.cf-timer-alert-box{margin-top:6px;background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:8px 12px}
-.cf-timer-alert-title{font-size:12px;font-weight:700;color:#c2410c}
-.cf-timer-alert-msg{font-size:11px;color:#7c2d12;margin:4px 0}
-.cf-timer-alert-actions{display:flex;gap:8px;margin-top:6px}
+/* Problem timer */
+.cf-problem-area{display:flex;flex-direction:column;gap:8px;margin:8px 0;width:100%;container-type:inline-size}
+.cf-timer-card{--timer-surface:#fff;--timer-text:#223246;--timer-muted:#536579;--timer-border:#d6e0e9;--timer-track:#e9eff5;--timer-accent:#245c96;position:relative;min-width:0;padding:12px 16px 14px;border:1px solid var(--timer-border);border-radius:9px;background:var(--timer-surface);color:var(--timer-text)}
+.cf-timer-card.is-collapsed{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:6px;padding:8px 12px}
+.cf-timer-header{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:28px}
+.cf-timer-heading{font-size:12px;font-weight:650;letter-spacing:.01em}
+.cf-timer-header-actions{display:flex;align-items:center;gap:4px}
+.cf-timer-icon-btn{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--timer-muted);font-size:21px;line-height:1}
+.cf-timer-icon-btn:hover,.cf-timer-text-btn:hover{background:var(--timer-track);color:var(--timer-text)}
+.cf-timer-collapse{font-size:22px}
+.cf-timer-main{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:5px}
+.cf-timer-clock{display:flex;flex-direction:column;min-width:0}
+.cf-timer-digits{font:650 36px/1.12 system-ui,-apple-system,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-.045em;white-space:nowrap;color:var(--timer-text)}
+.cf-timer-clock-caption{margin-top:4px;color:var(--timer-muted);font-size:11px;white-space:nowrap}
+.cf-timer-primary{flex:none;min-width:86px;height:40px;padding:0 17px;border:1px solid var(--timer-accent);border-radius:7px;background:var(--timer-accent);color:#fff;font-size:12px;font-weight:650}
+.cf-timer-primary:hover{background:#184979;border-color:#184979}
+.cf-timer-progress{height:4px;margin-top:14px;overflow:hidden;border-radius:3px;background:var(--timer-track)}
+.cf-timer-progress>span{display:block;height:100%;border-radius:3px;background:var(--timer-accent)}
+.cf-timer-settings-wrap{position:relative}
+.cf-timer-settings{position:absolute;top:36px;right:-36px;z-index:20;width:260px;max-width:calc(100vw - 36px);padding:13px;border:1px solid var(--timer-border);border-radius:9px;background:var(--timer-surface);box-shadow:0 10px 28px #22324624;color:var(--timer-text)}
+.cf-timer-setting-label{margin:2px 0 6px;color:var(--timer-muted);font-size:11px;font-weight:650}
+.cf-timer-setting-label:not(:first-child){margin-top:14px}
+.cf-timer-choice-row{display:flex;flex-wrap:wrap;gap:5px}
+.cf-timer-choice-row button{min-height:31px;padding:5px 9px;border:1px solid var(--timer-border);border-radius:6px;background:var(--timer-surface);color:var(--timer-text);font-size:11px}
+.cf-timer-choice-row button:hover{background:var(--timer-track)}
+.cf-timer-choice-row button[aria-pressed=true]{border-color:var(--timer-accent);background:#eef5fb;color:#1d527f;font-weight:650}
+.cf-timer-text-btn{min-height:30px;padding:5px 7px;border:0;border-radius:5px;background:transparent;color:var(--timer-accent);font-size:11px;font-weight:600;text-align:left}
+.cf-timer-settings>.cf-timer-text-btn{margin-top:5px}
+.cf-timer-custom{display:flex;align-items:center;gap:6px;margin-top:5px;font-size:11px}
+.cf-timer-custom input{width:66px;padding:5px 6px}
+.cf-timer-custom button,.cf-timer-reset-confirm button{min-height:28px;padding:4px 8px;border:1px solid var(--timer-border);border-radius:5px;background:#fff;color:var(--timer-accent);font-size:11px;font-weight:600}
+.cf-timer-settings-divider{height:1px;margin:13px 0 8px;background:var(--timer-border)}
+.cf-timer-reset-confirm{display:flex;align-items:center;flex-wrap:wrap;gap:6px;font-size:11px}
+.cf-timer-reset-confirm span{flex-basis:100%}
+.cf-timer-alert-box{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px 12px;margin-top:11px;padding:8px 10px;border:1px solid #e9d7ac;border-radius:6px;background:#fffbf1;color:#6f4d12;font-size:11px}
+.cf-timer-alert-box strong{font-weight:700}
+.cf-timer-alert-actions{display:flex;gap:4px;flex:none}
+.cf-timer-alert-actions .cf-timer-text-btn{color:#745018}
+.cf-timer-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.cf-timer-card.is-collapsed .cf-timer-header{grid-column:2;grid-row:1;min-height:40px}
+.cf-timer-card.is-collapsed .cf-timer-heading{display:none}
+.cf-timer-card.is-collapsed .cf-timer-main{grid-column:1;grid-row:1;justify-content:flex-start;margin:0;min-height:40px}
+.cf-timer-card.is-collapsed .cf-timer-digits{font-size:22px;letter-spacing:-.03em}
+.cf-timer-card.is-collapsed .cf-timer-clock-caption{margin-top:0;font-size:10px}
+.cf-timer-card.is-collapsed .cf-timer-primary{height:34px;min-width:72px;margin-left:auto;padding:0 10px}
+@container(max-width:340px){.cf-timer-card:not(.is-collapsed) .cf-timer-main{align-items:stretch;flex-direction:column;gap:11px}.cf-timer-card:not(.is-collapsed) .cf-timer-primary{width:100%}.cf-timer-card.is-collapsed .cf-timer-clock-caption{display:none}}
+@media(prefers-reduced-motion:reduce){.cf-timer-card *{scroll-behavior:auto}}

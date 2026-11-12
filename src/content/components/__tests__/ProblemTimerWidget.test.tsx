@@ -89,7 +89,8 @@ describe('ProblemTimerWidget component rendering', () => {
     await act(async () => {
       root!.render(<ProblemTimerWidget problemKey="100-A" />);
     });
-    expect(container!.textContent).toContain('Thinking Countdown');
+    expect(container!.textContent).toContain('Practice timer');
+    expect(container!.textContent).toContain('Countdown · 20 min');
     expect(container!.textContent).toContain('20:00');
     expect(container!.querySelector('[data-testid="timer-start-btn"]')).not.toBeNull();
   });
@@ -133,22 +134,27 @@ describe('ProblemTimerWidget component rendering', () => {
       root!.render(<ProblemTimerWidget problemKey="100-C" />);
     });
 
-    expect(container!.textContent).toContain('Thinking Countdown');
-
-    // Click switch mode button
-    const toggleBtn = container!.querySelector('.cf-timer-toggle-btn') as HTMLButtonElement;
+    expect(container!.textContent).toContain('Countdown · 20 min');
+    const settingsBtn = container!.querySelector('[aria-label="Timer settings"]') as HTMLButtonElement;
     await act(async () => {
-      toggleBtn.click();
+      settingsBtn.click();
     });
+    expect(settingsBtn.getAttribute('aria-expanded')).toBe('true');
+    const stopwatchBtn = container!.querySelector('[aria-label="Timer mode"] button:last-child') as HTMLButtonElement;
+    await act(async () => stopwatchBtn.click());
 
-    expect(container!.textContent).toContain('Practice Stopwatch');
+    expect(container!.textContent).toContain('Stopwatch');
     expect(container!.querySelector('[data-testid="timer-digits"]')?.textContent).toBe('00:00');
 
-    // Click again to switch back
+    const countdownBtn = container!.querySelector('[aria-label="Timer mode"] button:first-child') as HTMLButtonElement;
     await act(async () => {
-      toggleBtn.click();
+      countdownBtn.click();
     });
-    expect(container!.textContent).toContain('Thinking Countdown');
+    expect(container!.textContent).toContain('Countdown · 20 min');
+    const durationBtn = Array.from(container!.querySelectorAll('[aria-label="Countdown duration"] button')).find(button => button.textContent === '30 min') as HTMLButtonElement;
+    await act(async () => durationBtn.click());
+    expect(container!.querySelector('[data-testid="timer-digits"]')?.textContent).toBe('30:00');
+    expect(loadStoredTimer('100-C').countdownLimitMinutes).toBe(30);
   });
 
   it('shows thinking limit alert when countdown reaches zero', async () => {
@@ -169,7 +175,7 @@ describe('ProblemTimerWidget component rendering', () => {
     });
 
     expect(container!.querySelector('[data-testid="timer-alert-box"]')).not.toBeNull();
-    expect(container!.textContent).toContain('Hết thời gian suy nghĩ độc lập');
+    expect(container!.textContent).toContain('Time limit reached.');
 
     // Snooze 5 minutes
     const snoozeBtn = container!.querySelector('.cf-timer-btn-snooze') as HTMLButtonElement;
@@ -179,5 +185,42 @@ describe('ProblemTimerWidget component rendering', () => {
 
     expect(container!.querySelector('[data-testid="timer-alert-box"]')).toBeNull();
     expect(container!.querySelector('[data-testid="timer-digits"]')?.textContent).toBe('04:59');
+  });
+
+  it('keeps the clock and primary action visible when collapsed', async () => {
+    await act(async () => root!.render(<ProblemTimerWidget problemKey="100-E" />));
+    const collapseBtn = container!.querySelector('[aria-label="Collapse timer"]') as HTMLButtonElement;
+    await act(async () => collapseBtn.click());
+    expect(container!.querySelector('.cf-timer-card')?.classList.contains('is-collapsed')).toBe(true);
+    expect(container!.querySelector('[data-testid="timer-digits"]')?.textContent).toBe('20:00');
+    expect(container!.querySelector('[data-testid="timer-start-btn"]')).not.toBeNull();
+    expect(container!.querySelector('[aria-label="Timer settings"]')).toBeNull();
+    await act(async () => (container!.querySelector('[data-testid="timer-start-btn"]') as HTMLButtonElement).click());
+    expect(container!.querySelector('[data-testid="timer-pause-btn"]')).not.toBeNull();
+  });
+
+  it('confirms reset after substantial elapsed time', async () => {
+    saveStoredTimer({ problemKey: '100-F', elapsedMs: 90_000, runningSince: null, mode: 'stopwatch', countdownLimitMinutes: 20, alertAcknowledged: false });
+    await act(async () => root!.render(<ProblemTimerWidget problemKey="100-F" />));
+    await act(async () => (container!.querySelector('[aria-label="Timer settings"]') as HTMLButtonElement).click());
+    await act(async () => (container!.querySelector('[data-testid="timer-reset-btn"]') as HTMLButtonElement).click());
+    expect(container!.textContent).toContain('Reset elapsed time?');
+    expect(loadStoredTimer('100-F').elapsedMs).toBe(90_000);
+    await act(async () => (container!.querySelector('[data-testid="timer-confirm-reset-btn"]') as HTMLButtonElement).click());
+    expect(loadStoredTimer('100-F').elapsedMs).toBe(0);
+    expect(container!.querySelector('[data-testid="timer-digits"]')?.textContent).toBe('00:00');
+  });
+
+  it('restores elapsed time and keeps a dismissed expiry notice dismissed', async () => {
+    saveStoredTimer({ problemKey: '100-G', elapsedMs: 21 * 60_000, runningSince: null, mode: 'countdown', countdownLimitMinutes: 20, alertAcknowledged: false });
+    await act(async () => root!.render(<ProblemTimerWidget problemKey="100-G" />));
+    expect(container!.querySelector('[data-testid="timer-alert-box"]')).not.toBeNull();
+    expect(container!.querySelector('.cf-timer-progress')?.getAttribute('aria-valuenow')).toBe('100');
+    const continueBtn = Array.from(container!.querySelectorAll('.cf-timer-alert-actions button')).find(button => button.textContent === 'Continue') as HTMLButtonElement;
+    await act(async () => continueBtn.click());
+    expect(container!.querySelector('[data-testid="timer-alert-box"]')).toBeNull();
+    expect(loadStoredTimer('100-G').alertAcknowledged).toBe(true);
+    await act(async () => root!.render(<ProblemTimerWidget problemKey="100-G" />));
+    expect(container!.querySelector('[data-testid="timer-alert-box"]')).toBeNull();
   });
 });

@@ -161,7 +161,7 @@ describe('in-page content integration', () => {
     const problemHost = document.getElementById('cfchart-problem-host');
     expect(problemHost).not.toBeNull();
     const shadowEl = problemHost!.shadowRoot!;
-    expect(shadowEl.textContent).toContain('Thinking Countdown');
+    expect(shadowEl.textContent).toContain('Countdown · 20 min');
     expect(shadowEl.textContent).not.toContain('Solved');
   });
 });
