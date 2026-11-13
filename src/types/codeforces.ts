@@ -137,6 +137,8 @@ export interface RecommendedProblem {
   slot: RecSlot;
   slotLabel: string;
   pSolve: number | null; // Unavailable until a calibrated model passes evaluation.
+  /** Research shadow estimate for historical acceptance; never show as independent-solve odds. */
+  shadowAcceptance?: number;
   plannedMinutes: number;
   reasons: string[]; // e.g. ["Targeting weak topic: graphs", "Recent uncompleted contest problem"]
   qualityScore: number;

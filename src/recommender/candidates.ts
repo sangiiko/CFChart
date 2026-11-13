@@ -5,6 +5,11 @@ import { explainRecommendation } from './explain';
 import { scoreProblem } from './score';
 import { getProblemUrl } from '../services/codeforcesApi';
 import { latestEvents } from './events';
+import modelJson from './acceptance-model.json';
+import { buildAcceptanceFeaturesFromHistory } from './features';
+import { predictHistoricalAcceptanceModel, type AcceptanceModel } from './inference';
+
+const shadowModel = modelJson as AcceptanceModel;
 
 const SLOT_LABELS: Record<RecSlot, string> = {
   timed: 'Timed practice',
@@ -64,6 +69,9 @@ export function buildCandidates(
     const baseScore = scoreProblem(p, targetRating, false, !!weakTag);
     const bonus = review ? 0.5 : upsolve ? 0.35 : 0;
 
-    return [{ item, score: baseScore + bonus }];
+    const features = buildAcceptanceFeaturesFromHistory(p, state.acceptanceHistory ?? null);
+    const shadowAcceptance = features ? predictHistoricalAcceptanceModel(shadowModel, features) : undefined;
+    if (shadowAcceptance !== undefined) item.shadowAcceptance = shadowAcceptance;
+    return [{ item, score: baseScore + bonus, ...(shadowAcceptance === undefined ? {} : { shadowAcceptance }) }];
   });
 }

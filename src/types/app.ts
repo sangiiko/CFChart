@@ -64,6 +64,7 @@ export type ExtensionRequest =
   | { type: 'CFCHART_REQUEST'; action: 'exportPracticeData'; handle: string }
   | { type: 'CFCHART_REQUEST'; action: 'clearPracticeData'; handle: string }
   | { type: 'CFCHART_REQUEST'; action: 'practiceSession'; handle: string; key: string; event?: { id: string; action: SessionAction } }
+  | { type: 'CFCHART_REQUEST'; action: 'recordPracticeImpressions'; handle: string; problemKeys: string[]; day: string }
   | { type: 'CFCHART_REQUEST'; action: 'getPreferences' }
   | { type: 'CFCHART_REQUEST'; action: 'updatePreferences'; preferences: Partial<Preferences> }
   | { type: 'CFCHART_REQUEST'; action: 'detectViewer'; handle: string }

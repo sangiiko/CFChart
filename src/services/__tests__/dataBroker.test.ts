@@ -363,6 +363,18 @@ describe('review regressions', () => {
     expect(events[1].minutes).toBeUndefined();
   });
 
+  it('records only displayed problems from the current plan and exports a descriptive outcome join', async () => {
+    const { broker } = fixture();
+    await broker.updatePreferences({ personalHandle: 'alice' });
+    const plan = await broker.getPractice('alice');
+    const key = `${plan.recommendations[0].contestId}-${plan.recommendations[0].index}`;
+    await broker.recordPracticeImpressions('alice', [key, '9999-Z'], '2026-11-10');
+    await broker.recordPracticeImpressions('alice', [key], '2026-11-10');
+    const data = await broker.exportPracticeData('alice') as { ledger: { impressions?: unknown[] }; recommendationFeedback: { impressions: number; exposedAssignments: number } };
+    expect(data.ledger.impressions).toHaveLength(1);
+    expect(data.recommendationFeedback).toMatchObject({ impressions: 1, exposedAssignments: 1 });
+  });
+
   it('observes a later acceptance despite an earlier self-report and deduplicates refreshes', async () => {
     const { broker, api, advance, submission } = fixture();
     const p = (await broker.getPractice('alice')).recommendations[0];

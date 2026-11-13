@@ -1,11 +1,13 @@
 import type { CFRatingChange, CFSubmission } from '../types/codeforces';
 import type { PracticeEvent, UserPracticeState } from './types';
+import { prepareAcceptanceHistory } from './features';
 
 export const problemKey = (p: { contestId?: number; index: string }) => `${p.contestId}-${p.index.toUpperCase()}`;
 export function buildPracticeState(submissions: CFSubmission[], ratings: CFRatingChange[], rating: number | undefined,
   historyComplete: boolean, events: PracticeEvent[], now: number): UserPracticeState {
   const state: UserPracticeState = { solved: new Set(), attempted: new Map(), participatedContests: new Set(ratings.map(r => r.contestId)),
-    tagActivity: new Map(), recentRating: Number.isFinite(rating) ? rating! : 800, historyComplete, events, now };
+    tagActivity: new Map(), recentRating: Number.isFinite(rating) ? rating! : 800, historyComplete, events, now,
+    acceptanceHistory: prepareAcceptanceHistory(submissions, ratings, now) };
   const episodes = new Map<string, CFSubmission[]>();
   const seenIds = new Set<number>();
   for (const s of submissions) {

@@ -86,7 +86,7 @@ export const TopBarHabitPill: React.FC<Props> = ({ preferences, onPreferencesCha
           {current?.error && <p className="cf-notice" role="status">{current.error} Showing saved data.</p>}
           {current && !current.coverage.complete && <div className="cf-notice"><p>{current.coverage.loaded.toLocaleString()} submissions synced. Older activity is still unknown. Recommendations appear once the full solved history is checked.</p><button type="button" className="cf-link" disabled={loading} onClick={() => refresh(true)}>{loading ? 'Syncing…' : 'Sync more history'}</button></div>}
           {current?.coverage.complete && (
-            <PracticeRecommendations key={handle} recommendations={current.recommendations} />
+            <PracticeRecommendations key={handle} handle={handle} recommendations={current.recommendations} />
           )}
         </>}
         <div className="cf-popover-footer"><a href={`/profile/${encodeURIComponent(handle)}`}>View your rating chart ↗</a><button type="button" className="cf-link" disabled={loading} onClick={() => refresh()}>{loading ? 'Refreshing…' : 'Refresh'}</button></div><div className="cf-personal-footer"><button type="button" className="cf-link" onClick={() => { setInput(handle); setSettingHandle(true); }}>Change handle</button>{current && <span>{current.stale ? 'Cached · ' : ''}{new Date(current.updatedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</span>}</div>

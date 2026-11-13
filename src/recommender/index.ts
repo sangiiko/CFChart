@@ -74,6 +74,7 @@ export * from './learning';
 export * from './retention';
 export * from './time';
 export * from './policy';
+export * from './evaluation';
 export * from './bayesian';
 export * from './events';
 export * from './state';

@@ -1,4 +1,6 @@
 import React, { useEffect, useState, useRef, useId } from 'react';
+import { practiceSession } from '../../services/extensionClient';
+import type { SessionAction } from '../../recommender/session';
 
 export interface StoredTimerState {
   problemKey: string;
@@ -104,10 +106,11 @@ export function formatTime(ms: number): string {
 
 interface Props {
   problemKey: string;
+  handle?: string;
   onTimeUpdate?: (elapsedMs: number) => void;
 }
 
-export const ProblemTimerWidget: React.FC<Props> = ({ problemKey, onTimeUpdate }) => {
+export const ProblemTimerWidget: React.FC<Props> = ({ problemKey, handle, onTimeUpdate }) => {
   const [timer, setTimer] = useState<StoredTimerState>(() => loadStoredTimer(problemKey));
   const [now, setNow] = useState<number>(Date.now());
   const [collapsed, setCollapsed] = useState(false);
@@ -120,6 +123,28 @@ export const ProblemTimerWidget: React.FC<Props> = ({ problemKey, onTimeUpdate }
   const customId = useId();
   const settingsRef = useRef<HTMLDivElement>(null);
   const previousTimeUp = useRef(false);
+  const assistanceRecorded = useRef(false);
+
+  const recordSessionAction = async (action: SessionAction) => {
+    if (!handle) return;
+    const current = await practiceSession(handle, problemKey);
+    if (!current || current.stopped) {
+      if (action === 'pause' || action === 'assistance' || action === 'stop') {
+        await practiceSession(handle, problemKey, { id: crypto.randomUUID(), action: 'start' });
+      } else if (action === 'resume') {
+        await practiceSession(handle, problemKey, { id: crypto.randomUUID(), action: 'start' });
+        return;
+      }
+    }
+    const refreshed = await practiceSession(handle, problemKey);
+    if (action === 'pause' && refreshed?.runningSince === null) return;
+    if (action === 'resume' && refreshed?.runningSince !== null) return;
+    await practiceSession(handle, problemKey, { id: crypto.randomUUID(), action });
+  };
+
+  const syncSession = (action: SessionAction) => {
+    void recordSessionAction(action).catch(() => setAnnouncement('Timer session could not be saved.'));
+  };
 
   // Keep a ref to the latest state so unmount / background interval always writes current state
   const stateRef = useRef(timer);
@@ -133,6 +158,7 @@ export const ProblemTimerWidget: React.FC<Props> = ({ problemKey, onTimeUpdate }
     setCustomOpen(false);
     setConfirmReset(false);
     previousTimeUp.current = false;
+    assistanceRecorded.current = false;
   }, [problemKey]);
 
   useEffect(() => {
@@ -197,6 +223,7 @@ export const ProblemTimerWidget: React.FC<Props> = ({ problemKey, onTimeUpdate }
   }, [isTimeUp, timer.alertAcknowledged]);
 
   const handleStart = () => {
+    syncSession(timer.elapsedMs > 0 ? 'resume' : 'start');
     const updated: StoredTimerState = {
       ...timer,
       runningSince: Date.now(),
@@ -208,6 +235,7 @@ export const ProblemTimerWidget: React.FC<Props> = ({ problemKey, onTimeUpdate }
 
   const handlePause = () => {
     if (timer.runningSince === null) return;
+    syncSession('pause');
     const added = Date.now() - timer.runningSince;
     const updated: StoredTimerState = {
       ...timer,
@@ -220,6 +248,17 @@ export const ProblemTimerWidget: React.FC<Props> = ({ problemKey, onTimeUpdate }
   };
 
   const handleReset = () => {
+    if (currentElapsedMs > 0) {
+      void (async () => {
+        try {
+          if (timer.runningSince !== null) await recordSessionAction('pause');
+          await recordSessionAction('stop');
+        } catch {
+          setAnnouncement('Timer session could not be saved.');
+        }
+      })();
+    }
+    assistanceRecorded.current = false;
     const updated: StoredTimerState = {
       ...timer,
       elapsedMs: 0,
@@ -272,6 +311,13 @@ export const ProblemTimerWidget: React.FC<Props> = ({ problemKey, onTimeUpdate }
     setTimer(updated);
     saveStoredTimer(updated);
     setAnnouncement('Time limit notice dismissed');
+  };
+
+  const handleAssistance = () => {
+    if (assistanceRecorded.current) return;
+    assistanceRecorded.current = true;
+    syncSession('assistance');
+    setAnnouncement('Hint use recorded');
   };
 
   const primaryButton = (
@@ -333,6 +379,7 @@ export const ProblemTimerWidget: React.FC<Props> = ({ problemKey, onTimeUpdate }
         </div>
         {primaryButton}
       </div>
+      {!collapsed && (currentElapsedMs > 0 || isRunning) && <button type="button" className="cf-timer-text-btn" onClick={handleAssistance} data-testid="timer-assistance-btn">I used a hint</button>}
       {!collapsed && timer.mode === 'countdown' && <div className="cf-timer-progress" role="progressbar" aria-label="Countdown elapsed" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} aria-valuetext={`${progress}% of time elapsed`}><span style={{ width: `${progress}%` }} /></div>}
       {!collapsed && isTimeUp && !timer.alertAcknowledged && <div className="cf-timer-alert-box" data-testid="timer-alert-box">
         <span><strong>Time limit reached.</strong> Take a hint or continue when you're ready.</span>

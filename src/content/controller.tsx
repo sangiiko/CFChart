@@ -136,7 +136,7 @@ export function startCFChart() {
           problemBar.root.render(
             <RenderBoundary>
               <div className="cf-problem-area">
-                <ProblemTimerWidget problemKey={problemKeyStr} />
+                <ProblemTimerWidget problemKey={problemKeyStr} handle={userHandle ?? undefined} />
                 {isAccepted && userHandle && (
                   <ProblemVerdictBar
                     handle={userHandle}

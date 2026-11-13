@@ -113,7 +113,7 @@ export function PracticeApp({ fullPage = false }: { fullPage?: boolean }) {
 
           {snapshot && !snapshot.coverage.complete && <div className="notice"><strong>History sync in progress</strong><p>{snapshot.coverage.loaded.toLocaleString()} submissions loaded. Older activity is still unknown; recommendations appear after the solved history is checked.</p><button className="button" disabled={loading} onClick={() => void load({ syncMore: true })}>{loading ? 'Syncing…' : 'Continue history sync'}</button></div>}
 
-          <div id="practice">{snapshot?.coverage.complete && <PracticeRecommendations key={personalHandle} recommendations={snapshot.recommendations} expandedByDefault={fullPage} />}</div>
+          <div id="practice">{snapshot?.coverage.complete && <PracticeRecommendations key={personalHandle} handle={personalHandle} recommendations={snapshot.recommendations} expandedByDefault={fullPage} />}</div>
 
           {!fullPage && <div className="button-row app-secondary-actions"><a className="text-button" href={getExtensionApi()?.runtime.getURL?.('dashboard.html') ?? 'dashboard.html'} target="_blank" rel="noreferrer">Open dashboard ↗</a><button className="text-button" disabled={loading} onClick={() => void load({ force: true })}>{loading ? 'Syncing…' : 'Refresh'}</button></div>}
           </div>

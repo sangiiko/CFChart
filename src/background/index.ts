@@ -59,6 +59,9 @@ async function handleRequest(message: ExtensionRequest): Promise<ExtensionRespon
         return { ok: true, data: undefined };
       case 'practiceSession':
         return { ok: true, data: await dataBroker.practiceSession(message.handle, message.key, message.event) };
+      case 'recordPracticeImpressions':
+        await dataBroker.recordPracticeImpressions(message.handle, message.problemKeys, message.day);
+        return { ok: true, data: undefined };
       case 'getPreferences':
         return { ok: true, data: await dataBroker.getPreferences() };
       case 'updatePreferences': {

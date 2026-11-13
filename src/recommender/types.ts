@@ -1,5 +1,6 @@
 import type { SessionEvent } from './session';
 import type { CFProblem, RecommendedProblem } from '../types/codeforces';
+import type { AcceptanceHistory } from './features';
 
 export interface EnrichedProblem extends CFProblem {
   solvedCount: number;
@@ -29,6 +30,7 @@ export interface Candidate {
   item: RecommendedProblem;
   score: number;
   marginal?: number;
+  shadowAcceptance?: number;
 }
 export interface PracticeAssignment {
   id: string;
@@ -40,7 +42,8 @@ export interface PracticeAssignment {
   /** Deterministic baseline assignment; does not support evaluation of other actions. */
   selectionProbability: 1;
 }
-export interface PracticeLedger { removedSolves?: { day: string; problemKey: string }[]; version: 1; events: PracticeEvent[]; sessions?: SessionEvent[]; assignments?: PracticeAssignment[] }
+export interface PracticeImpression { id: string; day: string; problemKey: string; displayedAt: number; position: number }
+export interface PracticeLedger { removedSolves?: { day: string; problemKey: string }[]; version: 1; events: PracticeEvent[]; sessions?: SessionEvent[]; assignments?: PracticeAssignment[]; impressions?: PracticeImpression[] }
 export interface PracticePlan {
   version: 1;
   policy: 'adaptive-baseline-v1';
@@ -59,6 +62,7 @@ export interface UserPracticeState {
   events: PracticeEvent[];
   now: number;
   mode?: 'adaptive' | 'timed' | 'guided' | 'transfer';
+  acceptanceHistory?: AcceptanceHistory | null;
 }
 export interface SkillProfile {
   globalTheta: number;

@@ -8,6 +8,7 @@ import { enrichCatalog } from '../recommender/catalog';
 import { selectRecommendationsV2, POLICY_VERSION } from '../recommender';
 import { buildPracticeState, problemKey } from '../recommender/state';
 import { appendEvent, emptyLedger, latestEvents, validateFeedback } from '../recommender/events';
+import { summarizeRecommendationFeedback } from '../recommender/evaluation';
 import type { PracticeFeedback, PracticeLedger, PracticePlan } from '../recommender/types';
 import { format } from 'date-fns';
 
@@ -464,8 +465,7 @@ export function createDataBroker(options: BrokerOptions = {}) {
     return locked(`cfchart:practice:${handle.toLowerCase()}`, async () => {
       const ledger = await storage.getValue<PracticeLedger>(ledgerKey(handle)) ?? emptyLedger();
       if (event) {
-        const plan = await storage.getValue<PracticePlan>(planKey(handle));
-        if (!plan?.items.some(p => problemKey(p) === key)) throw new Error('Task is no longer in your practice plan.');
+        if (!/^\d+-\w+$/.test(key)) throw new Error('Invalid problem key.');
         const sessions = appendSession(ledger.sessions ?? [], { ...event, at: now(), problemKey: key });
         if (sessions !== ledger.sessions) await storage.setValue(ledgerKey(handle), { ...ledger, sessions });
         return replaySession(sessions, key, now());
@@ -473,11 +473,35 @@ export function createDataBroker(options: BrokerOptions = {}) {
       return replaySession(ledger.sessions ?? [], key, now());
     });
   }
+  async function recordPracticeImpressions(handle: string, problemKeys: string[], day: string): Promise<void> {
+    handle = normalizeHandle(handle);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !Array.isArray(problemKeys) || problemKeys.length > 20 ||
+      problemKeys.some(key => !/^\d+-\w+$/.test(key))) throw new Error('Invalid practice impressions.');
+    await locked(`cfchart:practice:${handle.toLowerCase()}`, async () => {
+      const plan = await storage.getValue<PracticePlan>(planKey(handle));
+      if (!plan || plan.day !== day) return;
+      const ledger = await storage.getValue<PracticeLedger>(ledgerKey(handle)) ?? emptyLedger();
+      const impressions = [...(ledger.impressions ?? [])];
+      const known = new Set(impressions.map(item => item.id));
+      for (const key of problemKeys) {
+        const position = plan.items.findIndex(item => problemKey(item) === key);
+        if (position < 0) continue;
+        const id = `${day}:${key}`;
+        if (!known.has(id)) impressions.push({ id, day, problemKey: key, displayedAt: now(), position });
+        known.add(id);
+      }
+      if (impressions.length !== (ledger.impressions?.length ?? 0)) {
+        await storage.setValue(ledgerKey(handle), { ...ledger, impressions });
+      }
+    });
+  }
   async function exportPracticeData(handle: string) {
     handle = normalizeHandle(handle);
-    return locked(`cfchart:practice:${handle.toLowerCase()}`, async () => ({ version: 1, handle,
-      ledger: await storage.getValue<PracticeLedger>(ledgerKey(handle)) ?? emptyLedger(),
-      plan: await storage.getValue<PracticePlan>(planKey(handle)) ?? null }));
+    return locked(`cfchart:practice:${handle.toLowerCase()}`, async () => {
+      const ledger = await storage.getValue<PracticeLedger>(ledgerKey(handle)) ?? emptyLedger();
+      return { version: 1, handle, ledger, plan: await storage.getValue<PracticePlan>(planKey(handle)),
+        recommendationFeedback: summarizeRecommendationFeedback(ledger) };
+    });
   }
   async function removeTodaySolve(handle: string, key: string): Promise<void> {
     handle = normalizeHandle(handle);
@@ -499,7 +523,7 @@ export function createDataBroker(options: BrokerOptions = {}) {
     });
   }
   return { getPreferences, updatePreferences, detectViewer, getProfile, getPractice,
-    recordPracticeFeedback, exportPracticeData, clearPracticeData, practiceSession, removeTodaySolve };
+    recordPracticeFeedback, exportPracticeData, clearPracticeData, practiceSession, recordPracticeImpressions, removeTodaySolve };
 }
 
 export const dataBroker = createDataBroker();
