@@ -8,6 +8,7 @@ import {
   loadStoredTimer,
   saveStoredTimer,
   getTimerStorageKey,
+  DURATION_PREFERENCE_KEY,
 } from '../ProblemTimerWidget';
 
 const store = new Map<string, string>();
@@ -19,6 +20,10 @@ const fakeStorage = {
 };
 
 Object.defineProperty(window, 'sessionStorage', {
+  value: fakeStorage,
+  writable: true,
+});
+Object.defineProperty(window, 'localStorage', {
   value: fakeStorage,
   writable: true,
 });
@@ -59,6 +64,13 @@ describe('ProblemTimerWidget utility functions', () => {
     expect(loaded.elapsedMs).toBe(15_000);
     expect(loaded.mode).toBe('stopwatch');
     expect(loaded.countdownLimitMinutes).toBe(30);
+  });
+
+  it('uses the preferred duration for new problems while preserving existing timers', () => {
+    fakeStorage.setItem(DURATION_PREFERENCE_KEY, '45');
+    expect(loadStoredTimer('1234-C').countdownLimitMinutes).toBe(45);
+    saveStoredTimer({ ...loadStoredTimer('1234-D'), countdownLimitMinutes: 30 });
+    expect(loadStoredTimer('1234-D').countdownLimitMinutes).toBe(30);
   });
 });
 
@@ -155,6 +167,8 @@ describe('ProblemTimerWidget component rendering', () => {
     await act(async () => durationBtn.click());
     expect(container!.querySelector('[data-testid="timer-digits"]')?.textContent).toBe('30:00');
     expect(loadStoredTimer('100-C').countdownLimitMinutes).toBe(30);
+    expect(fakeStorage.getItem(DURATION_PREFERENCE_KEY)).toBe('30');
+    expect(loadStoredTimer('100-H').countdownLimitMinutes).toBe(30);
   });
 
   it('shows thinking limit alert when countdown reaches zero', async () => {

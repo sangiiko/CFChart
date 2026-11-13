@@ -10,12 +10,34 @@ export interface StoredTimerState {
 }
 
 export const STORAGE_PREFIX = 'cfchart_timer_';
+export const DURATION_PREFERENCE_KEY = 'cfchart_timer_duration_minutes';
 
 export function getTimerStorageKey(problemKey: string): string {
   return `${STORAGE_PREFIX}${problemKey}`;
 }
 
 const memoryFallback = new Map<string, string>();
+const preferenceFallback = new Map<string, string>();
+
+function getPreferredDuration(): number {
+  try {
+    const raw = window.localStorage.getItem(DURATION_PREFERENCE_KEY);
+    const minutes = Number(raw);
+    if (raw !== null && Number.isInteger(minutes) && minutes >= 1 && minutes <= 1440) return minutes;
+  } catch {
+    const raw = preferenceFallback.get(DURATION_PREFERENCE_KEY);
+    if (raw) return Number(raw);
+  }
+  return 20;
+}
+
+function savePreferredDuration(minutes: number): void {
+  try {
+    window.localStorage.setItem(DURATION_PREFERENCE_KEY, String(minutes));
+  } catch {
+    preferenceFallback.set(DURATION_PREFERENCE_KEY, String(minutes));
+  }
+}
 
 function getStorage(): { getItem: (k: string) => string | null; setItem: (k: string, v: string) => void; removeItem: (k: string) => void; clear: () => void } {
   try {
@@ -51,7 +73,7 @@ export function loadStoredTimer(problemKey: string): StoredTimerState {
     elapsedMs: 0,
     runningSince: null,
     mode: 'countdown',
-    countdownLimitMinutes: 20,
+    countdownLimitMinutes: getPreferredDuration(),
     alertAcknowledged: false,
   };
 }
@@ -229,6 +251,7 @@ export const ProblemTimerWidget: React.FC<Props> = ({ problemKey, onTimeUpdate }
     };
     setTimer(updated);
     saveStoredTimer(updated);
+    savePreferredDuration(minutes);
     setCustomMinutes(String(minutes));
     setAnnouncement(`Duration set to ${minutes} minutes`);
   };
