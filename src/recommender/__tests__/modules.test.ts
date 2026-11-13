@@ -180,7 +180,7 @@ describe('policy logging and disabled models', () => {
       url: '',
     };
     const record = createAssignmentRecord(recItem, 1400, true);
-    expect(record.policy).toBe('adaptive-baseline-v1');
+    expect(record.policy).toBe('adaptive-baseline-v2');
     expect(record.selectionProbability).toBe(1);
     expect(record.historyComplete).toBe(true);
     expect(DEFAULT_POLICY_EPSILON).toBe(0.0);

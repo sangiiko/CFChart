@@ -3,10 +3,18 @@ import { problemKey } from './state';
 import { latestEvents } from './events';
 
 const DAY = 86400000;
+export const MODERN_CONTEST_WINDOW_MS = 3 * 365.25 * DAY;
 
 export interface EligibilityContext {
   target: number;
   review?: boolean;
+}
+
+/** Prefer finished problems from recent contests because old problem ratings may no longer fit today's scale. */
+export function isModernContestProblem(p: EnrichedProblem, now: number): boolean {
+  if (!Number.isFinite(p.contestStart)) return false;
+  const age = now - p.contestStart! * 1000;
+  return age >= 0 && age <= MODERN_CONTEST_WINDOW_MS;
 }
 
 /** Check if a problem is eligible for recommendation under hard constraints. */

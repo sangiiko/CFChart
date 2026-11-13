@@ -1,6 +1,6 @@
 import type { RecommendedProblem, RecSlot } from '../types/codeforces';
 import type { Candidate, EnrichedProblem, SkillProfile, UserPracticeState } from './types';
-import { isProblemEligible, isRecentUpsolve, isScheduledReview } from './eligibility';
+import { isModernContestProblem, isProblemEligible, isRecentUpsolve, isScheduledReview } from './eligibility';
 import { explainRecommendation } from './explain';
 import { scoreProblem } from './score';
 import { getProblemUrl } from '../services/codeforcesApi';
@@ -66,12 +66,14 @@ export function buildCandidates(
     };
 
     const targetRating = weakTag ? (skill.tagTheta.get(weakTag) ?? target) + 100 : target + 100;
-    const baseScore = scoreProblem(p, targetRating, false, !!weakTag);
+    const modern = isModernContestProblem(p, state.now);
+    // In a sparse modern pool, prefer recent ratings when otherwise comparable.
+    const baseScore = scoreProblem(p, targetRating, false, !!weakTag) + (modern ? 0.4 : 0);
     const bonus = review ? 0.5 : upsolve ? 0.35 : 0;
 
     const features = buildAcceptanceFeaturesFromHistory(p, state.acceptanceHistory ?? null);
     const shadowAcceptance = features ? predictHistoricalAcceptanceModel(shadowModel, features) : undefined;
     if (shadowAcceptance !== undefined) item.shadowAcceptance = shadowAcceptance;
-    return [{ item, score: baseScore + bonus, ...(shadowAcceptance === undefined ? {} : { shadowAcceptance }) }];
+    return [{ item, score: baseScore + bonus, modern, ...(shadowAcceptance === undefined ? {} : { shadowAcceptance }) }];
   });
 }

@@ -47,11 +47,11 @@ export function createAssignmentRecord(
   timestamp = Date.now()
 ): PracticeAssignment {
   const day = new Date(timestamp).toISOString().slice(0, 10);
-  const id = `adaptive-baseline-v1:${day}:${problem.contestId}-${problem.index}:${problem.slot}:${problem.plannedMinutes}`;
+  const id = `adaptive-baseline-v2:${day}:${problem.contestId}-${problem.index}:${problem.slot}:${problem.plannedMinutes}`;
   return {
     id,
     timestamp,
-    policy: 'adaptive-baseline-v1',
+    policy: 'adaptive-baseline-v2',
     problem,
     rating,
     historyComplete,

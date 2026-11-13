@@ -62,7 +62,7 @@ The boosted candidate passes the **offline acceptance-prediction gate** and its 
 ## Release decision and next work
 
 1. **Keep `cfchart-top5000-v1` installed.** Neither new forecast candidate clears the declared accuracy gates. The 90-day two-stage result warrants further work on calibrated intervals and 30-day behavior, using a fresh development split before touching the frozen holdouts again.
-2. **Keep `adaptive-baseline-v1` as the recommender policy.** The boosted model is a strong acceptance predictor on attempted problems, but acceptance prediction is not yet a demonstrated improvement to the displayed recommendation list.
+2. **Keep the boosted model out of the recommender policy.** This report evaluated against `adaptive-baseline-v1`; the current recency-aware `adaptive-baseline-v2` policy has not been evaluated here. Acceptance prediction is not yet a demonstrated improvement to the displayed recommendation list.
 3. Add a browser evaluator and exact feature parity for the boosted artifact, then evaluate calibration and latency in the extension. Use local recommendation assignments and opt-in outcome feedback to measure the policy itself; do not treat unseen problems as failures.
 4. Once a candidate passes its remaining gates, perform explicit installation, build, browser smoke checks, and rollback review. No candidate was installed in this experiment.
 

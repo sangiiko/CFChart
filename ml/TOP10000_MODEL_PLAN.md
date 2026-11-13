@@ -4,7 +4,7 @@
 
 Use the completed top-10,000 Codeforces cohort to improve two user-facing features: official-rating forecasts and practice recommendations. Keep training offline and inference local to the extension. Promote a model only after it improves on data reserved before model development.
 
-As checked on 2026-11-12, `ml/data/top10000/users` contains 10,000 JSON files and `ml/data/top10000/top10000_handles.txt` contains 10,000 handles. **File count alone is not a completeness or quality audit.** No `ml/artifacts/top10000-overnight` artifact exists yet. The bundled predictor is the validated `cfchart-top5000-v1`; the recommender uses `adaptive-baseline-v1`. The existing `ml/artifacts/recommender` artifact was trained on a much smaller cohort and is not the extension's recommender policy.
+As checked on 2026-11-12, `ml/data/top10000/users` contains 10,000 JSON files and `ml/data/top10000/top10000_handles.txt` contains 10,000 handles. **File count alone is not a completeness or quality audit.** No `ml/artifacts/top10000-overnight` artifact exists yet. The bundled predictor is the validated `cfchart-top5000-v1`; the latest recommender policy is `adaptive-baseline-v2`, with the older `adaptive-baseline-v1` retained as the experiment comparison. The existing `ml/artifacts/recommender` artifact was trained on a much smaller cohort and is not the extension's recommender policy.
 
 This is an offline development plan, not an instruction to install any newly trained model automatically.
 
@@ -33,7 +33,7 @@ The goal is a measured improvement, not novelty for its own sake. A larger or mo
 
 1. Reserve users by a stable handle hash. Within the remaining users, reserve a later time block for temporal evaluation. Keep a 90-day gap before rating-forecast holdouts so no training label reaches into the evaluation period. Record exact UTC cutoffs in the audit manifest.
 2. Use **as-of** features only: a snapshot can use rating events and submissions at or before its timestamp. Problem difficulty and tags are collection-time metadata; measure results with that limitation stated, and avoid claiming that retrospective tests prove prospective performance.
-3. Reproduce the bundled `cfchart-top5000-v1` on the same eligible 30- and 90-day snapshots as every new candidate. Compare against unchanged rating and recent momentum. For recommendation experiments, compare with `adaptive-baseline-v1` and a rating-gap-only solve-probability baseline.
+3. Reproduce the bundled `cfchart-top5000-v1` on the same eligible 30- and 90-day snapshots as every new candidate. Compare against unchanged rating and recent momentum. For recommendation experiments, compare with both `adaptive-baseline-v1` and the current `adaptive-baseline-v2`, plus a rating-gap-only solve-probability baseline.
 4. Report results by user as well as by snapshot. Repeated snapshots from one user are correlated; use user-level bootstrap intervals for differences in metrics, and show sample counts in each subgroup.
 
 **Deliverable:** frozen split specification and baseline scorecard with overall and historical-rating-band results. Do not change these holdouts after looking at candidate results.

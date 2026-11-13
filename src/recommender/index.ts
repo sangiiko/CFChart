@@ -5,7 +5,7 @@ import { estimateSkill } from './skill';
 import { problemKey } from './state';
 import { buildCandidates } from './candidates';
 
-export const POLICY_VERSION = 'adaptive-baseline-v1' as const;
+export const POLICY_VERSION = 'adaptive-baseline-v2' as const;
 
 export function selectRecommendationsV2(
   problems: EnrichedProblem[],
@@ -17,7 +17,16 @@ export function selectRecommendationsV2(
   if (!state.historyComplete || !Number.isFinite(dailyTarget) || !Number.isFinite(budget) || budget < 10) return [];
   const limit = Math.max(0, Math.min(20, Math.floor(dailyTarget)));
   const skill = estimateSkill(state);
-  const candidates = buildCandidates(problems, state, skill, budget);
+  const allCandidates = buildCandidates(problems, state, skill, budget);
+  const modernCandidates = allCandidates.filter(candidate => candidate.modern);
+  const maxPossibleItems = Math.floor(Math.min(240, budget) / 20);
+  const modernItemsNeeded = Math.min(limit, maxPossibleItems);
+  const pinnedKeys = new Set(pinned.map(problemKey));
+  // Use only the last three years when that pool can fill the requested session.
+  // Otherwise retain older tasks as a fallback, with a score preference for modern ones.
+  const candidates = modernItemsNeeded > 0 && modernCandidates.length >= modernItemsNeeded
+    ? allCandidates.filter(candidate => candidate.modern || pinnedKeys.has(problemKey(candidate.item)))
+    : allCandidates;
 
   const selected: RecommendedProblem[] = [];
   const used = new Set<string>();

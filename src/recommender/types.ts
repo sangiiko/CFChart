@@ -29,13 +29,14 @@ export interface PracticeEvent extends PracticeFeedback {
 export interface Candidate {
   item: RecommendedProblem;
   score: number;
+  modern?: boolean;
   marginal?: number;
   shadowAcceptance?: number;
 }
 export interface PracticeAssignment {
   id: string;
   timestamp: number;
-  policy: 'adaptive-baseline-v1';
+  policy: 'adaptive-baseline-v2';
   problem: RecommendedProblem;
   rating: number;
   historyComplete: boolean;
@@ -46,7 +47,7 @@ export interface PracticeImpression { id: string; day: string; problemKey: strin
 export interface PracticeLedger { removedSolves?: { day: string; problemKey: string }[]; version: 1; events: PracticeEvent[]; sessions?: SessionEvent[]; assignments?: PracticeAssignment[]; impressions?: PracticeImpression[] }
 export interface PracticePlan {
   version: 1;
-  policy: 'adaptive-baseline-v1';
+  policy: 'adaptive-baseline-v2';
   day: string;
   budget: number;
   target: number;
