@@ -123,7 +123,6 @@ export const ProblemTimerWidget: React.FC<Props> = ({ problemKey, handle, onTime
   const customId = useId();
   const settingsRef = useRef<HTMLDivElement>(null);
   const previousTimeUp = useRef(false);
-  const assistanceRecorded = useRef(false);
 
   const recordSessionAction = async (action: SessionAction) => {
     if (!handle) return;
@@ -158,7 +157,6 @@ export const ProblemTimerWidget: React.FC<Props> = ({ problemKey, handle, onTime
     setCustomOpen(false);
     setConfirmReset(false);
     previousTimeUp.current = false;
-    assistanceRecorded.current = false;
   }, [problemKey]);
 
   useEffect(() => {
@@ -258,7 +256,6 @@ export const ProblemTimerWidget: React.FC<Props> = ({ problemKey, handle, onTime
         }
       })();
     }
-    assistanceRecorded.current = false;
     const updated: StoredTimerState = {
       ...timer,
       elapsedMs: 0,
@@ -311,13 +308,6 @@ export const ProblemTimerWidget: React.FC<Props> = ({ problemKey, handle, onTime
     setTimer(updated);
     saveStoredTimer(updated);
     setAnnouncement('Time limit notice dismissed');
-  };
-
-  const handleAssistance = () => {
-    if (assistanceRecorded.current) return;
-    assistanceRecorded.current = true;
-    syncSession('assistance');
-    setAnnouncement('Hint use recorded');
   };
 
   const primaryButton = (
@@ -379,7 +369,6 @@ export const ProblemTimerWidget: React.FC<Props> = ({ problemKey, handle, onTime
         </div>
         {primaryButton}
       </div>
-      {!collapsed && (currentElapsedMs > 0 || isRunning) && <button type="button" className="cf-timer-text-btn" onClick={handleAssistance} data-testid="timer-assistance-btn">I used a hint</button>}
       {!collapsed && timer.mode === 'countdown' && <div className="cf-timer-progress" role="progressbar" aria-label="Countdown elapsed" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} aria-valuetext={`${progress}% of time elapsed`}><span style={{ width: `${progress}%` }} /></div>}
       {!collapsed && isTimeUp && !timer.alertAcknowledged && <div className="cf-timer-alert-box" data-testid="timer-alert-box">
         <span><strong>Time limit reached.</strong> Take a hint or continue when you're ready.</span>
