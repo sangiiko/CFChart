@@ -370,13 +370,13 @@ export function createDataBroker(options: BrokerOptions = {}) {
           const finished = previous.filter(p => {
             if (p.slot === 'revisit' || removed.has(problemKey(p))) return false;
             const event = latest.get(problemKey(p));
-            return event ? !['skipped', 'already-solved'].includes(event.outcome) : state.solved.has(problemKey(p));
+            return event ? ['accepted', 'independent', 'assisted'].includes(event.outcome) : state.solved.has(problemKey(p));
           });
           const seenOutsideKeys = new Set<string>();
           const outsideProblems: RecommendedProblem[] = [];
           for (const e of latest.values()) {
             if (removed.has(e.problemKey) || earlierAssistedKeys.has(e.problemKey)) continue;
-            if (!['skipped', 'already-solved'].includes(e.outcome) && !previous.some(p => problemKey(p) === e.problemKey)) {
+            if (['accepted', 'independent', 'assisted'].includes(e.outcome) && !previous.some(p => problemKey(p) === e.problemKey)) {
               if (!seenOutsideKeys.has(e.problemKey)) {
                 seenOutsideKeys.add(e.problemKey);
                 outsideProblems.push(e.problem);
@@ -385,7 +385,7 @@ export function createDataBroker(options: BrokerOptions = {}) {
           }
           const allFinished = [...finished, ...outsideProblems];
           const spent = allFinished.reduce((total, p) => total + Math.max(p.plannedMinutes, latest.get(problemKey(p))?.minutes ?? 0), 0)
-            + [...latest.values()].filter(e => ['skipped', 'already-solved'].includes(e.outcome)).reduce((total, e) => total + (e.minutes ?? 0), 0);
+            + [...latest.values()].filter(e => ['skipped', 'already-solved', 'timeout'].includes(e.outcome)).reduce((total, e) => total + (e.minutes ?? 0), 0);
           const pending = previous.filter(p => !allFinished.some(f => problemKey(f) === problemKey(p)) && !latest.has(problemKey(p)));
           const budget = preferences.practiceMinutes ?? 60;
           const remainingDailyTarget = Math.max(0, preferences.dailyTarget - allFinished.length);

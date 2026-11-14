@@ -405,6 +405,21 @@ describe('review regressions', () => {
     expect(snap.recommendations.map(r => `${r.contestId}-${r.index}`)).toEqual([reviewKey]);
     expect(snap.recommendations[0].slot).toBe('revisit');
   });
+
+  it('does not count timeout outcomes as completing dailyTarget', async () => {
+    const { broker } = fixture();
+    await broker.updatePreferences({ personalHandle: 'alice', dailyTarget: 2, practiceMinutes: 90 });
+    const first = (await broker.getPractice('alice')).recommendations[0];
+    await broker.recordPracticeFeedback('alice', {
+      id: 'timeout-1',
+      problemKey: `${first.contestId}-${first.index}`,
+      outcome: 'timeout',
+      minutes: 20,
+    });
+    const after = await broker.getPractice('alice');
+    expect(after.progress.todayCount).toBe(0);
+    expect(after.recommendations.length).toBeGreaterThan(0);
+  });
 });
 
 it('removes a solve locally across refreshes without hiding a later day or another account', async () => {
