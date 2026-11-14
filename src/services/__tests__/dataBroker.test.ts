@@ -441,6 +441,110 @@ describe('review regressions', () => {
     expect(after.progress.todayCount).toBe(1);
     expect(after.recommendations).toHaveLength(2);
   });
+
+  it('automatically pauses a running session on another problem when starting a timer on a new problem tab', async () => {
+    const { broker, advance } = fixture();
+    await broker.practiceSession('alice', '10-A', { id: 'start-a', action: 'start' });
+    advance(45000);
+    const secondSession = await broker.practiceSession('alice', '10-B', { id: 'start-b', action: 'start' });
+    expect(secondSession?.runningSince).not.toBeNull();
+    expect(secondSession?.problemKey).toBe('10-B');
+
+    const stateA = await broker.practiceSession('alice', '10-A');
+    const stateB = await broker.practiceSession('alice', '10-B');
+    expect(stateA?.runningSince).toBeNull();
+    expect(stateA?.elapsedMs).toBe(45000);
+    expect(stateB?.runningSince).not.toBeNull();
+  });
+
+  it('syncs past assignments, events, and solved submissions to the updated recommender schema', async () => {
+    const { broker, api, values, submission } = fixture();
+    api.fetchProblemCatalog.mockResolvedValue([
+      { contestId: 10, index: 'A', name: 'Warmup', rating: 1400, tags: ['dp', 'trees'], solvedCount: 15000 },
+      { contestId: 10, index: 'B', name: 'Challenge', rating: 1600, tags: ['graphs'], solvedCount: 8000 },
+    ]);
+    const pastTime = new Date(2026, 10, 8, 12).getTime();
+    // Seed a legacy assignment and event from before the update (missing tags, shadowAcceptance, and calibrated qualityScore)
+    const legacyProblem = {
+      contestId: 10,
+      index: 'A',
+      name: 'Warmup',
+      rating: 1400,
+      tags: [] as string[],
+      slot: 'core' as const,
+      slotLabel: 'Core',
+      pSolve: null,
+      plannedMinutes: 30,
+      reasons: ['Legacy recommendation'],
+      qualityScore: 1,
+      url: 'https://codeforces.com/problemset/problem/10/A',
+    };
+    values.set('cfchart:learning:alice', {
+      version: 1,
+      events: [
+        {
+          id: 'legacy-ev-1',
+          version: 1,
+          problemKey: '10-A',
+          outcome: 'assisted',
+          timestamp: pastTime + 1000,
+          problem: legacyProblem,
+          provenance: 'self-report',
+        },
+      ],
+      assignments: [
+        {
+          id: 'adaptive-baseline-v2:2026-11-08:10-A:core:30',
+          timestamp: pastTime,
+          policy: 'adaptive-baseline-v2',
+          problem: legacyProblem,
+          rating: 1400,
+          historyComplete: true,
+          selectionProbability: 1,
+        },
+        {
+          id: 'adaptive-baseline-v2:2026-11-09:10-B:stretch:40',
+          timestamp: pastTime + 86400000,
+          policy: 'adaptive-baseline-v2',
+          problem: { ...legacyProblem, index: 'B', name: 'Challenge', rating: 1600, slot: 'stretch' },
+          rating: 1400,
+          historyComplete: true,
+          selectionProbability: 1,
+        },
+      ],
+      impressions: [
+        {
+          id: '2026-11-08:10-A',
+          day: '2026-11-08',
+          problemKey: '10-A',
+          displayedAt: pastTime + 500,
+          position: 0,
+        },
+      ],
+    });
+    // Alice solved 10-B on 2026-11-09 on Codeforces
+    api.fetchSubmissionPage.mockResolvedValue([
+      {
+        ...submission(4000),
+        creationTimeSeconds: Math.floor((pastTime + 86400000 + 3600000) / 1000),
+        verdict: 'OK',
+        problem: { contestId: 10, index: 'B', name: 'Challenge', rating: 1600, tags: ['graphs'] },
+      },
+    ]);
+
+    await broker.getPractice('alice', { force: true });
+    const exported = await broker.exportPracticeData('alice');
+    const syncedAssignmentA = exported.ledger.assignments?.find(a => a.id.includes('10-A'));
+    const syncedEventA = exported.ledger.events.find(e => e.id === 'legacy-ev-1');
+    const backfilledSolveB = exported.ledger.events.find(e => e.problemKey === '10-B' && e.provenance === 'codeforces-api');
+
+    expect(syncedAssignmentA?.problem.tags).toEqual(['dp', 'trees']);
+    expect(syncedAssignmentA?.problem.qualityScore).not.toBe(1);
+    expect(typeof syncedAssignmentA?.problem.shadowAcceptance).toBe('number');
+    expect(syncedEventA?.problem).toEqual(syncedAssignmentA?.problem);
+    expect(backfilledSolveB?.outcome).toBe('accepted');
+    expect(exported.recommendationFeedback.shadowPredictionMean).not.toBeNull();
+  });
 });
 
 it('removes a solve locally across refreshes without hiding a later day or another account', async () => {

@@ -8,8 +8,11 @@ import { latestEvents } from './events';
 import modelJson from './acceptance-model.json';
 import { buildAcceptanceFeaturesFromHistory } from './features';
 import { predictHistoricalAcceptanceModel, type AcceptanceModel } from './inference';
+import { selectMostInformativeWeakTag, transferSimilarityScore } from './semantic';
+import { estimateMemoryState } from './retention';
+import { problemKey } from './state';
 
-const shadowModel = modelJson as AcceptanceModel;
+const shadowModel = Object.freeze(modelJson) as AcceptanceModel;
 
 const SLOT_LABELS: Record<RecSlot, string> = {
   timed: 'Timed practice',
@@ -29,7 +32,8 @@ export function buildCandidates(
   budget: number
 ): Candidate[] {
   const target = skill.globalTheta;
-  const latest = latestEvents(state.events.filter(e => e.timestamp <= state.now));
+  const pastEvents = state.events.filter(e => e.timestamp <= state.now);
+  const latest = latestEvents(pastEvents);
 
   return problems.flatMap(p => {
     if (!Number.isFinite(p.rating) || !p.contestId) return [];
@@ -39,7 +43,7 @@ export function buildCandidates(
 
     if (!isProblemEligible(p, state, { target, review }, latest)) return [];
 
-    const weakTag = p.tags.find(tag => (skill.tagTheta.get(tag) ?? target) < target - 30);
+    const weakTag = selectMostInformativeWeakTag(p.tags, skill.tagTheta, target);
     const upsolve = !review && isRecentUpsolve(p, state);
     const mode = state.mode ?? 'adaptive';
 
@@ -68,9 +72,19 @@ export function buildCandidates(
 
     const targetRating = weakTag ? (skill.tagTheta.get(weakTag) ?? target) + 100 : target + 100;
     const modern = isModernContestProblem(p, state.now);
-    // In a sparse modern pool, prefer recent ratings when otherwise comparable.
-    const baseScore = scoreProblem(p, targetRating, false, !!weakTag) + (modern ? 0.4 : 0);
-    const bonus = review ? 0.5 : upsolve ? 0.35 : 0;
+    const qualityAdj = Number.isFinite(p.qualityScore) ? 0.12 * (p.qualityScore - 1) : 0;
+    // In a sparse modern pool, prefer recent ratings and higher-quality problems when otherwise comparable.
+    const baseScore = scoreProblem(p, targetRating, false, !!weakTag) + (modern ? 0.4 : 0) + qualityAdj;
+
+    let bonus = 0;
+    if (review) {
+      const memory = estimateMemoryState(problemKey(p), pastEvents, state.now, p.rating!, state.recentRating);
+      bonus = 0.5 + 0.15 * memory.urgency;
+    } else if (upsolve) {
+      bonus = 0.35;
+    } else if (slot === 'transfer') {
+      bonus = 0.25 * transferSimilarityScore(p, pastEvents, state.now);
+    }
 
     const features = buildAcceptanceFeaturesFromHistory(p, state.acceptanceHistory ?? null);
     const shadowAcceptance = features ? predictHistoricalAcceptanceModel(shadowModel, features) : undefined;

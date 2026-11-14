@@ -66,3 +66,31 @@ export function advanceUncertainty(b: Belief, qPerDay: number, elapsedDays: numb
   const covariance = b.covariance.map((row, i) => row.map((val, j) => (i === j ? val + drift : val)));
   return { mean: [...b.mean], covariance };
 }
+
+/**
+ * Expected Laplace-Gaussian log-determinant information gain I(theta; Y | x, difficulty):
+ * measures how much attempting a task reduces epistemic skill uncertainty.
+ */
+export function expectedInformationGain(b: Belief, x: number[], difficulty: number): number {
+  validate(b, x);
+  if (!Number.isFinite(difficulty)) throw new Error('Invalid difficulty.');
+  const v = b.covariance.map(row => dot(row, x));
+  const projVar = dot(x, v);
+  if (projVar < -1e-9) throw new Error('Invalid covariance.');
+  const p = posteriorSolve(b, x, difficulty);
+  const fisher = p * (1 - p);
+  return 0.5 * Math.log(1 + Math.max(0, projVar) * fisher);
+}
+
+/** Upper Confidence Bound (UCB) acquisition score in projected ability space. */
+export function ucbScore(b: Belief, x: number[], difficulty: number, beta = 1.0): number {
+  validate(b, x);
+  if (!Number.isFinite(difficulty) || !Number.isFinite(beta) || beta < 0) {
+    throw new Error('Invalid UCB parameters.');
+  }
+  const v = b.covariance.map(row => dot(row, x));
+  const projVar = dot(x, v);
+  if (projVar < -1e-9) throw new Error('Invalid covariance.');
+  const meanMargin = dot(x, b.mean) - difficulty;
+  return sigmoid(meanMargin) + beta * Math.sqrt(Math.max(0, projVar));
+}

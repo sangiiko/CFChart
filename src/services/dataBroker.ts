@@ -4,9 +4,12 @@ import type { CFProblem, CFRatingChange, CFSubmission, CFUser, RecommendedProble
 import { codeforcesApi, getProblemUrl, normalizeHandle } from './codeforcesApi';
 import { storageService } from './storage';
 import { calculateHabitProgress } from './habitTracker';
-import { enrichCatalog } from '../recommender/catalog';
+import { enrichCatalog, computeProblemQuality } from '../recommender/catalog';
 import { selectRecommendationsV2, selectScheduledReviews, POLICY_VERSION } from '../recommender';
 import { buildPracticeState, problemKey } from '../recommender/state';
+import { prepareAcceptanceHistory, buildAcceptanceFeaturesFromHistory } from '../recommender/features';
+import { predictHistoricalAcceptanceModel, type AcceptanceModel } from '../recommender/inference';
+import modelJson from '../recommender/acceptance-model.json';
 import { appendEvent, emptyLedger, latestEvents, validateFeedback } from '../recommender/events';
 import { summarizeRecommendationFeedback } from '../recommender/evaluation';
 import type { PracticeFeedback, PracticeLedger, PracticePlan } from '../recommender/types';
@@ -266,11 +269,67 @@ export function createDataBroker(options: BrokerOptions = {}) {
           if (catalog.value.error) errors.push(catalog.value.error);
           const day = format(new Date(now()), 'yyyy-MM-dd');
           const saved = await storage.getValue<PracticePlan>(planKey(handle));
+          const enriched = enrichCatalog(catalog.value.problems, catalog.value.contests ?? []);
+          const enrichedMap = new Map(enriched.map(cp => [problemKey(cp), cp]));
+
+          // Sync past ledger records (assignments, events, and saved plan items) to the current model & catalog
+          const historyCache = new Map<number, ReturnType<typeof prepareAcceptanceHistory>>();
+          const getHistoryAt = (asOfMs: number) => {
+            let h = historyCache.get(asOfMs);
+            if (!h) {
+              h = prepareAcceptanceHistory(cached!.submissions, profile.value.ratings, asOfMs);
+              historyCache.set(asOfMs, h);
+            }
+            return h;
+          };
+          const syncProblemRecord = (prob: RecommendedProblem, asOfMs: number): RecommendedProblem => {
+            const cat = enrichedMap.get(problemKey(prob));
+            const tags = prob.tags?.length ? prob.tags : (cat?.tags ?? []);
+            const rating = Number.isFinite(prob.rating) ? prob.rating : (cat?.rating ?? 1400);
+            const qualityScore = cat ? cat.qualityScore : (prob.qualityScore ?? 1);
+            let shadowAcceptance = prob.shadowAcceptance;
+            if (shadowAcceptance === undefined && Number.isFinite(rating)) {
+              const features = buildAcceptanceFeaturesFromHistory({ ...prob, rating, tags }, getHistoryAt(asOfMs));
+              shadowAcceptance = features
+                ? predictHistoricalAcceptanceModel(modelJson as AcceptanceModel, features)
+                : undefined;
+            }
+            if (
+              tags === prob.tags &&
+              rating === prob.rating &&
+              qualityScore === prob.qualityScore &&
+              shadowAcceptance === prob.shadowAcceptance
+            ) {
+              return prob;
+            }
+            return {
+              ...prob,
+              tags,
+              rating,
+              qualityScore,
+              ...(shadowAcceptance !== undefined ? { shadowAcceptance } : {}),
+            };
+          };
+
+          let ledgerUpdated = false;
+          const syncedAssignments = (ledger.assignments ?? []).map(a => {
+            const syncedProb = syncProblemRecord(a.problem, a.timestamp);
+            if (syncedProb !== a.problem) {
+              ledgerUpdated = true;
+              return { ...a, problem: syncedProb };
+            }
+            return a;
+          });
 
           // Automatic observation from public Codeforces API submissions without manual tracking
-          let ledgerUpdated = false;
           const currentEvents = [...ledger.events];
-          const savedItems = saved?.items ?? [];
+          const savedItems = (saved?.items ?? []).map(p => {
+            const key = problemKey(p);
+            const matchingAssignment = [...syncedAssignments]
+              .reverse()
+              .find(a => problemKey(a.problem) === key && (!saved?.day || a.id.includes(`:${saved.day}:${key}:`)));
+            return matchingAssignment ? matchingAssignment.problem : syncProblemRecord(p, now());
+          });
           const okSubmissionsByKey = new Map<string, CFSubmission>();
           for (const s of cached.submissions) {
             if (s.verdict === 'OK' && s.problem?.contestId) {
@@ -301,6 +360,29 @@ export function createDataBroker(options: BrokerOptions = {}) {
               }
             }
           }
+          // Also backfill solves for past assignments across previous days if not yet observed
+          for (const a of syncedAssignments) {
+            const key = problemKey(a.problem);
+            const okSub = okSubmissionsByKey.get(key);
+            if (okSub && okSub.creationTimeSeconds * 1000 >= a.timestamp) {
+              const hasExisting = currentEvents.some(
+                e => e.id === `cf-api:${key}:${okSub.id}`
+              );
+              if (!hasExisting) {
+                currentEvents.push({
+                  id: `cf-api:${key}:${okSub.id}`,
+                  version: 1,
+                  problemKey: key,
+                  outcome: 'accepted',
+                  timestamp: okSub.creationTimeSeconds * 1000,
+                  problem: a.problem,
+                  provenance: 'codeforces-api',
+                  assistance: 'unknown',
+                });
+                ledgerUpdated = true;
+              }
+            }
+          }
           // Also observe any outside problems solved today on Codeforces
           const catalogMap = new Map(catalog.value.problems.map(cp => [problemKey(cp), cp]));
           for (const s of cached.submissions) {
@@ -311,7 +393,7 @@ export function createDataBroker(options: BrokerOptions = {}) {
               );
               if (!hasExisting) {
                 const catProblem = catalogMap.get(key);
-                const prob: RecommendedProblem = catProblem ? {
+                const baseProb: RecommendedProblem = catProblem ? {
                   contestId: catProblem.contestId ?? s.problem.contestId ?? 0,
                   index: catProblem.index,
                   name: catProblem.name,
@@ -322,7 +404,7 @@ export function createDataBroker(options: BrokerOptions = {}) {
                   pSolve: null,
                   plannedMinutes: 30,
                   reasons: ['Solved today on Codeforces'],
-                  qualityScore: 1,
+                  qualityScore: enrichedMap.get(key)?.qualityScore ?? 1,
                   url: getProblemUrl(catProblem.contestId, catProblem.index),
                 } : {
                   contestId: s.problem.contestId!,
@@ -338,6 +420,7 @@ export function createDataBroker(options: BrokerOptions = {}) {
                   qualityScore: 1,
                   url: getProblemUrl(s.problem.contestId!, s.problem.index),
                 };
+                const prob = syncProblemRecord(baseProb, s.creationTimeSeconds * 1000);
                 currentEvents.push({
                   id: `cf-api:${key}:${s.id}`,
                   version: 1,
@@ -352,14 +435,29 @@ export function createDataBroker(options: BrokerOptions = {}) {
               }
             }
           }
+          // Sync existing past events with enriched catalog & assignment metadata
+          for (let i = 0; i < currentEvents.length; i++) {
+            const ev = currentEvents[i];
+            const matchingAssignment = [...syncedAssignments]
+              .filter(a => problemKey(a.problem) === ev.problemKey && a.timestamp <= ev.timestamp)
+              .sort((a, b) => b.timestamp - a.timestamp)[0];
+            const syncedProb = matchingAssignment
+              ? matchingAssignment.problem
+              : syncProblemRecord(ev.problem, ev.timestamp);
+            if (syncedProb !== ev.problem) {
+              currentEvents[i] = { ...ev, problem: syncedProb };
+              ledgerUpdated = true;
+            }
+          }
           if (ledgerUpdated) {
             ledger.events = currentEvents;
+            ledger.assignments = syncedAssignments;
             await storage.setValue(ledgerKey(handle), ledger);
           }
 
           const state = buildPracticeState(cached.submissions, profile.value.ratings, profile.value.user.rating, true, ledger.events, now());
           state.mode = preferences.practiceMode;
-          const previous = saved?.version === 1 && saved.policy === POLICY_VERSION && saved.day === day ? saved.items : [];
+          const previous = saved?.version === 1 && saved.policy === POLICY_VERSION && saved.day === day ? savedItems : [];
           const latest = latestEvents(ledger.events.filter(e => format(new Date(e.timestamp), 'yyyy-MM-dd') === day));
           const removed = new Set((ledger.removedSolves ?? []).filter(r => r.day === day).map(r => r.problemKey));
           const earlierAssistedKeys = new Set(
@@ -389,7 +487,6 @@ export function createDataBroker(options: BrokerOptions = {}) {
           const pending = previous.filter(p => !allFinished.some(f => problemKey(f) === problemKey(p)) && !latest.has(problemKey(p)));
           const budget = Math.max(preferences.practiceMinutes ?? 60, preferences.dailyTarget * 30);
           const remainingDailyTarget = Math.max(0, preferences.dailyTarget - allFinished.length);
-          const enriched = enrichCatalog(catalog.value.problems, catalog.value.contests ?? []);
           const reviews = selectScheduledReviews(enriched, state);
           const reviewKeys = new Set(reviews.map(problemKey));
           const regular = selectRecommendationsV2(
@@ -407,10 +504,17 @@ export function createDataBroker(options: BrokerOptions = {}) {
             const assignments = [...(ledger.assignments ?? [])];
             for (const problem of recommendations) {
               const id = `${POLICY_VERSION}:${day}:${problemKey(problem)}:${problem.slot}:${problem.plannedMinutes}`;
-              if (!assignments.some(a => a.id === id)) assignments.push({ id, timestamp: now(), policy: POLICY_VERSION,
-                problem, rating: state.recentRating, historyComplete: state.historyComplete, selectionProbability: 1 });
+              const existingIdx = assignments.findIndex(a => a.id === id);
+              if (existingIdx < 0) {
+                assignments.push({ id, timestamp: now(), policy: POLICY_VERSION,
+                  problem, rating: state.recentRating, historyComplete: state.historyComplete, selectionProbability: 1 });
+              } else if (JSON.stringify(assignments[existingIdx].problem) !== JSON.stringify(problem)) {
+                assignments[existingIdx] = { ...assignments[existingIdx], problem };
+              }
             }
-            if (assignments.length !== (ledger.assignments?.length ?? 0)) await storage.setValue(ledgerKey(handle), { ...ledger, assignments });
+            if (JSON.stringify(assignments) !== JSON.stringify(ledger.assignments ?? [])) {
+              await storage.setValue(ledgerKey(handle), { ...ledger, assignments });
+            }
             await storage.setValue(planKey(handle), plan);
           }
         }
@@ -437,12 +541,21 @@ export function createDataBroker(options: BrokerOptions = {}) {
       const day = format(new Date(now()), 'yyyy-MM-dd');
       let problem = plan?.day === day ? plan.items.find(p => problemKey(p) === feedback.problemKey) : undefined;
       if (!problem) {
+        const matchingAssignment = [...(ledger.assignments ?? [])]
+          .reverse()
+          .find(a => problemKey(a.problem) === feedback.problemKey);
+        if (matchingAssignment) {
+          problem = matchingAssignment.problem;
+        }
+      }
+      if (!problem) {
         const cached = await storage.getValue<CachedPractice>(`cfchart:practice:${handle.toLowerCase()}`);
         const sub = cached?.submissions.find(s => problemKey(s.problem) === feedback.problemKey);
         const catalog = await storage.getValue<CachedCatalog>('cfchart:catalog');
         const catProblem = catalog?.problems.find(p => problemKey(p) === feedback.problemKey);
         const cfProblem = catProblem ?? sub?.problem;
         if (cfProblem) {
+          const contest = catalog?.contests?.find(c => c.id === cfProblem.contestId);
           problem = {
             contestId: cfProblem.contestId ?? 0,
             index: cfProblem.index,
@@ -454,7 +567,7 @@ export function createDataBroker(options: BrokerOptions = {}) {
             pSolve: null,
             plannedMinutes: 30,
             reasons: [],
-            qualityScore: 1,
+            qualityScore: computeProblemQuality(cfProblem, contest),
             url: getProblemUrl(cfProblem.contestId, cfProblem.index),
           };
         }
@@ -480,9 +593,25 @@ export function createDataBroker(options: BrokerOptions = {}) {
       const ledger = await storage.getValue<PracticeLedger>(ledgerKey(handle)) ?? emptyLedger();
       if (event) {
         if (!/^\d+-\w+$/.test(key)) throw new Error('Invalid problem key.');
-        const sessions = appendSession(ledger.sessions ?? [], { ...event, at: now(), problemKey: key });
+        const timestamp = now();
+        let currentSessions = ledger.sessions ?? [];
+        if (event.action === 'start' || event.action === 'resume') {
+          for (const otherKey of new Set(currentSessions.map(e => e.problemKey))) {
+            if (otherKey === key) continue;
+            const otherState = replaySession(currentSessions, otherKey, timestamp);
+            if (otherState?.runningSince != null) {
+              currentSessions = appendSession(currentSessions, {
+                id: `${event.id}-autopause-${otherKey}`,
+                at: timestamp,
+                problemKey: otherKey,
+                action: 'pause',
+              });
+            }
+          }
+        }
+        const sessions = appendSession(currentSessions, { ...event, at: timestamp, problemKey: key });
         if (sessions !== ledger.sessions) await storage.setValue(ledgerKey(handle), { ...ledger, sessions });
-        return replaySession(sessions, key, now());
+        return replaySession(sessions, key, timestamp);
       }
       return replaySession(ledger.sessions ?? [], key, now());
     });

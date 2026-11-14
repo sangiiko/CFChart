@@ -1,4 +1,4 @@
-import { improveSession } from './scheduler';
+import { improveSession, tagOverlapPenalty } from './scheduler';
 import type { RecommendedProblem } from '../types/codeforces';
 import type { EnrichedProblem, UserPracticeState } from './types';
 import { estimateSkill } from './skill';
@@ -41,7 +41,15 @@ export function selectRecommendationsV2(
   for (const previous of pinned) {
     const candidate = candidates.find(c => problemKey(c.item) === problemKey(previous));
     if (candidate && !used.has(problemKey(previous)) && selected.length < limit && previous.plannedMinutes <= remaining) {
-      add(previous);
+      add({
+        ...candidate.item,
+        ...previous,
+        tags: previous.tags?.length ? previous.tags : candidate.item.tags,
+        qualityScore: candidate.item.qualityScore,
+        ...(previous.shadowAcceptance === undefined && candidate.item.shadowAcceptance !== undefined
+          ? { shadowAcceptance: candidate.item.shadowAcceptance }
+          : {}),
+      });
     }
   }
 
@@ -56,7 +64,7 @@ export function selectRecommendationsV2(
             (penalty, s) =>
               penalty +
               (s.contestId === c.item.contestId ? 0.2 : 0) +
-              (s.tags.some(t => c.item.tags.includes(t)) ? 0.15 : 0),
+              tagOverlapPenalty(s.tags, c.item.tags),
             0
           ),
       }));
@@ -102,3 +110,4 @@ export * from './evaluation';
 export * from './bayesian';
 export * from './events';
 export * from './state';
+export * from './semantic';

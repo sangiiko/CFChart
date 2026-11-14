@@ -53,11 +53,22 @@ export interface PracticePlan {
   target: number;
   items: RecommendedProblem[];
 }
+export interface TagDifficultyStats {
+  accepted: number;
+  total: number;
+  /** Recency-weighted sum of (observed_ok - expected_irt_ok) across rated 90d episodes. */
+  irtResidualSum: number;
+  /** Sum of recency weights across rated 90d episodes. */
+  effectiveWeight: number;
+  /** Mean attempted problem rating in this tag. */
+  meanRating: number;
+}
 export interface UserPracticeState {
   solved: Set<string>;
   attempted: Map<string, { lastAttempt: number; count: number }>;
   participatedContests: Set<number>;
   tagActivity: Map<string, { accepted: number; total: number }>;
+  tagDifficulty?: Map<string, TagDifficultyStats>;
   recentRating: number;
   historyComplete: boolean;
   events: PracticeEvent[];
@@ -69,4 +80,6 @@ export interface SkillProfile {
   globalTheta: number;
   tagTheta: Map<string, number>;
   evidenceCount: number;
+  tagUncertainty?: Map<string, number>;
+  weakTags?: string[];
 }

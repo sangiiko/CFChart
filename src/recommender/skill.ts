@@ -35,8 +35,9 @@ export function estimateSkill(state: UserPracticeState): SkillProfile {
 
   // Topic deviations delta_k from public submission activity and timed feedback
   const tagDeviations = new Map<string, number>();
+  const tagUncertainty = new Map<string, number>();
 
-  // 1. Topic evidence from public Codeforces tag activity
+  // 1. Topic evidence from public Codeforces tag activity + difficulty-adjusted IRT residuals
   let totalAccepted = 0;
   let totalAttempts = 0;
   for (const activity of state.tagActivity.values()) {
@@ -45,13 +46,35 @@ export function estimateSkill(state: UserPracticeState): SkillProfile {
   }
   const overallSolveRate = totalAttempts > 0 ? totalAccepted / totalAttempts : 0.5;
 
+  let totalIrtResidual = 0;
+  let totalIrtWeight = 0;
+  if (state.tagDifficulty) {
+    for (const [tag, diffStats] of state.tagDifficulty.entries()) {
+      const activity = state.tagActivity.get(tag);
+      if (activity && activity.total === diffStats.total && diffStats.effectiveWeight > 0) {
+        totalIrtResidual += diffStats.irtResidualSum;
+        totalIrtWeight += diffStats.effectiveWeight;
+      }
+    }
+  }
+  const overallIrtResidual = totalIrtWeight > 0 ? totalIrtResidual / totalIrtWeight : 0;
+
   for (const [tag, activity] of state.tagActivity.entries()) {
+    tagUncertainty.set(tag, 200 / Math.sqrt(1 + activity.total / 3));
     if (activity.total >= 3) {
       const tagRate = activity.accepted / activity.total;
       const rateDiff = tagRate - overallSolveRate;
-      // Shrinkage towards zero deviation
+      const diffStats = state.tagDifficulty?.get(tag);
+      let effectiveSignal = rateDiff;
+      if (diffStats && diffStats.total === activity.total && diffStats.effectiveWeight > 0) {
+        const tagIrtMean = diffStats.irtResidualSum / diffStats.effectiveWeight;
+        const irtDiff = tagIrtMean - overallIrtResidual;
+        // Blend raw rate contrast with difficulty- & recency-adjusted IRT residual contrast
+        effectiveSignal = 0.5 * rateDiff + 0.5 * irtDiff;
+      }
+      // Empirical Bayes shrinkage towards zero deviation
       const shrinkage = activity.total / (activity.total + 5);
-      const delta = Math.max(-200, Math.min(200, shrinkage * 200 * rateDiff));
+      const delta = Math.max(-200, Math.min(200, shrinkage * 200 * effectiveSignal));
       tagDeviations.set(tag, delta);
     }
   }
@@ -62,6 +85,8 @@ export function estimateSkill(state: UserPracticeState): SkillProfile {
     if (tagged.length >= 3) {
       const adj = feedbackAdjustment(tagged);
       tagDeviations.set(tag, (tagDeviations.get(tag) ?? 0) * 0.5 + adj * 0.5);
+      const prevUnc = tagUncertainty.get(tag) ?? 200;
+      tagUncertainty.set(tag, prevUnc / Math.sqrt(1 + tagged.length / 2));
     }
   }
 
@@ -75,5 +100,10 @@ export function estimateSkill(state: UserPracticeState): SkillProfile {
     tagTheta.set(tag, Math.max(800, globalTheta + centeredDelta));
   }
 
-  return { globalTheta, tagTheta, evidenceCount: episodes.length };
+  const weakTags = [...tagTheta.entries()]
+    .filter(([, theta]) => theta < globalTheta - 30)
+    .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))
+    .map(([tag]) => tag);
+
+  return { globalTheta, tagTheta, evidenceCount: episodes.length, tagUncertainty, weakTags };
 }
