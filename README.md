@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/images/hero-banner.png" alt="CFChart 2.0 Banner — Interactive Codeforces Rating Charts, Local ML Forecasts, and Adaptive Practice" width="100%" />
+<img src="docs/images/hero-banner.png" alt="CFChart 2.0 Banner: Interactive Codeforces Rating Charts, Local ML Forecasts, and Adaptive Practice" width="100%" />
 
 <h3>Interactive Codeforces Rating Charts, Browser-Local ML Forecasts &amp; Adaptive Practice</h3>
 
@@ -24,7 +24,7 @@
 
 ---
 
-**CFChart** is a Manifest V3 browser extension for **Firefox** (including Zen, LibreWolf, Floorp, and Waterfox) and **Chromium-based browsers** (Chrome, Brave, Edge) that embeds proportional-time rating charts, on-device LightGBM rating forecasts, a 30-day practice streak tracker, an in-page problem timer, and a spaced-repetition recommender directly inside Codeforces — without any external server, login credentials, or tracking.
+**CFChart** is a Manifest V3 browser extension for **Firefox** (including Zen, LibreWolf, Floorp, and Waterfox) and **Chromium-based browsers** (Chrome, Brave, Edge) that embeds proportional-time rating charts, on-device LightGBM rating forecasts, a 30-day practice streak tracker, an in-page problem timer, and a spaced-repetition recommender directly inside Codeforces, without any external server, login credentials, or tracking.
 
 ---
 
@@ -38,7 +38,7 @@
 
 * **Proportional time axis:** Replaces Codeforces' default evenly-spaced contest spacing with a numeric timestamp SVG chart (`HorizonChart`) showing real training intervals across **10 Codeforces rank bands** (`Newbie` to `Legendary Grandmaster`, with Master starting at `2100` and International Master at `2300`).
 * **Complete contest summary:** Displays **Official rating**, **Best rating**, **Rated contests**, check timestamp, a collapsible **Contest history** table, and automatic fallback to Codeforces' native `#userRatingGraphHolder` on unrated profiles or load errors.
-* **Browser-local ML forecasts (`cfchart-top5000-v1`):** Computes **30-day** and **90-day** rating point estimates (`Model estimate — Not an official rating`) plus asymmetric quantile uncertainty bars (`[5th, 50th, 95th]` for 30d and `[4th, 50th, 96th]` for 90d) directly in TypeScript once at least **3 rated contests** and **90 days** of submission coverage are available.
+* **Browser-local ML forecasts (`cfchart-top5000-v1`):** Computes **30-day** and **90-day** rating point estimates (`Model estimate: Not an official rating`) plus asymmetric quantile uncertainty bars (`[5th, 50th, 95th]` for 30d and `[4th, 50th, 96th]` for 90d) directly in TypeScript once at least **3 rated contests** and **90 days** of submission coverage are available.
 * **Incremental backfill:** Includes a **Sync more forecast history** action when an account's 90-day practice window is only partially loaded, pulling one older page (`1,000` submissions) per click without flooding the API.
 
 ---
@@ -61,9 +61,9 @@
   <img src="docs/images/problem-timer-verdict.png" alt="CFChart in-page practice timer card, settings popover, and accepted-only Record outcome bar on a Codeforces problem page" width="100%" />
 </p>
 
-* **Countdown & Stopwatch modes:** Embedded on `/problemset/problem/...`, `/contest/.../problem/...`, and `/gym/.../problem/...` pages. Choose **Countdown** (`15`, `20`, `30`, `45 min` presets or custom `1–1440 min` — remembering your last chosen countdown duration in `localStorage`) or open-ended **Stopwatch** mode.
+* **Countdown & Stopwatch modes:** Embedded on `/problemset/problem/...`, `/contest/.../problem/...`, and `/gym/.../problem/...` pages. Choose **Countdown** (`15`, `20`, `30`, `45 min` presets or custom `1–1440 min`, remembering your last chosen countdown duration in `localStorage`) or open-ended **Stopwatch** mode.
 * **Reload-safe & collapsible:** Collapses into a slim control strip while keeping live time and Start/Pause/Resume controls accessible. Countdown expiry surfaces an inline **Time limit reached** banner with quick **+5 min** and **Continue** actions, while active sessions log pause/resume intervals locally (`sessionStorage` + background ledger).
-* **Accepted-only verdict bar:** Appears automatically once your tracked account has an accepted submission for that problem (from synced history or live `.verdict-accepted` on the page when signed into the same handle). Logging **Solved** or **Solved with help** auto-saves elapsed timer time (`>= 1 min` / `30+ sec`), pauses the running timer, and — for assisted solves — schedules an **Independent review** slot in **3 days**.
+* **Accepted-only verdict bar:** Appears automatically once your tracked account has an accepted submission for that problem (from synced history or live `.verdict-accepted` on the page when signed into the same handle). Logging **Solved** or **Solved with help** auto-saves elapsed timer time (`>= 1 min` / `30+ sec`), pauses the running timer, and for assisted solves schedules an **Independent review** slot in **3 days**.
 
 ---
 
@@ -83,7 +83,7 @@
 
 * **Shadow DOM encapsulation:** All in-page overlays (`#cfchart-personal-host`, `#cfchart-profile-host`, `#cfchart-problem-host`) mount inside Shadow DOM containers so Codeforces stylesheets and extension styles never collide.
 * **Strict profile vs. personal handle separation:** Visiting another user's Codeforces profile updates only the chart on that page; your personal handle, streak, timer sessions, and recommendations stay isolated to your configured account.
-* **Polite background API queue:** Every Codeforces request flows through a single serialized background worker spacing calls by `2,100 ms` (`credentials: 'omit'`, `20 s` timeout) and caches responses in `storage.local` (`5m` profile, `60s` practice, `24h` problemset catalog). Zero cookies, passwords, API keys, or remote analytics servers are used — see [PRIVACY.md](PRIVACY.md).
+* **Polite background API queue:** Every Codeforces request flows through a single serialized background worker spacing calls by `2,100 ms` (`credentials: 'omit'`, `20 s` timeout) and caches responses in `storage.local` (`5m` profile, `60s` practice, `24h` problemset catalog). Zero cookies, passwords, API keys, or remote analytics servers are used (see [PRIVACY.md](PRIVACY.md)).
 
 ---
 
@@ -152,8 +152,8 @@ Detects supported Gecko profiles (**Firefox**, **Zen Browser**, **LibreWolf**, *
 | **Practice activity (`7d / 30d / 90d` UTC)** | 18 | Total submission attempts, unique accepted problems, active UTC days, mean relative problem difficulty, rated accepted problem count (per window), plus 90-day acceptance rate, dedicated practice solves, and unique topic tag diversity |
 
 Explore the training, backtesting, parity checks, and top-10,000 cohort research docs:
-* [ml/README.md](ml/README.md) — Data collection, feature engineering, LightGBM training, calibration/monotonicity verification, and JSON export
-* [ml/TOP10000_MODEL_PLAN.md](ml/TOP10000_MODEL_PLAN.md) & [ml/TOP10000_MODEL_RESULTS.md](ml/TOP10000_MODEL_RESULTS.md) — Expanded 10k-user forecast & recommender episode benchmarks
+* [ml/README.md](ml/README.md): Data collection, feature engineering, LightGBM training, calibration/monotonicity verification, and JSON export
+* [ml/TOP10000_MODEL_PLAN.md](ml/TOP10000_MODEL_PLAN.md) & [ml/TOP10000_MODEL_RESULTS.md](ml/TOP10000_MODEL_RESULTS.md): Expanded 10k-user forecast & recommender episode benchmarks
 
 ---
 
@@ -220,7 +220,7 @@ Pushing to `main` triggers [`.github/workflows/firefox-release.yml`](.github/wor
 
 1. Bump `"version"` in `package.json`, `package-lock.json`, and `public/manifest.json`.
 2. *(Optional)* Add release notes under `docs/releases/<version>.md`.
-3. Commit and push to `origin/main` — CI creates tag `v<version>` and attaches `cfchart.xpi`, `cfchart-chrome.zip`, and `updates.json` for automatic Firefox updates.
+3. Commit and push to `origin/main` so CI creates tag `v<version>` and attaches `cfchart.xpi`, `cfchart-chrome.zip`, and `updates.json` for automatic Firefox updates.
 
 ---
 
