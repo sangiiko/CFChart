@@ -10,11 +10,11 @@ interface HorizonChartProps {
   forecasts?: ForecastPoint[];
 }
 const bands = [
-  { from: 0, to: 1200, color: '#ccc' }, { from: 1200, to: 1400, color: '#77ff77' },
+  { from: -1000, to: 1200, color: '#ccc' }, { from: 1200, to: 1400, color: '#77ff77' },
   { from: 1400, to: 1600, color: '#77ddbb' }, { from: 1600, to: 1900, color: '#aaaaff' },
-  { from: 1900, to: 2200, color: '#ff88ff' }, { from: 2200, to: 2400, color: '#ffcc88' },
-  { from: 2400, to: 2600, color: '#ffbb55' }, { from: 2600, to: 3000, color: '#ff7777' },
-  { from: 3000, to: 10000, color: '#ff3333' },
+  { from: 1900, to: 2100, color: '#ff88ff' }, { from: 2100, to: 2300, color: '#ffcc88' },
+  { from: 2300, to: 2400, color: '#ffbb55' }, { from: 2400, to: 2600, color: '#ff7777' },
+  { from: 2600, to: 3000, color: '#ff3333' }, { from: 3000, to: 10000, color: '#aa0000' },
 ];
 const date = (timestamp: number) => new Date(timestamp).toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
 const preciseDate = (timestamp: number) => new Date(timestamp).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });

@@ -50,9 +50,18 @@ describe('shared Codeforces request queue', () => {
 });
 
 describe('Codeforces display helpers', () => {
-  it('handles low ratings and builds Gym links correctly', () => {
+  it('handles low ratings, current Codeforces rank boundaries, and builds Gym links correctly', () => {
     expect(getRankTier(-10).name).toBe('Newbie');
     expect(getRankTier(undefined).name).toBe('Unrated');
+    expect(getRankTier(1899).name).toBe('Expert');
+    expect(getRankTier(1900).name).toBe('Candidate Master');
+    expect(getRankTier(2099).name).toBe('Candidate Master');
+    expect(getRankTier(2100).name).toBe('Master');
+    expect(getRankTier(2299).name).toBe('Master');
+    expect(getRankTier(2300).name).toBe('International Master');
+    expect(getRankTier(2400).name).toBe('Grandmaster');
+    expect(getRankTier(2600).name).toBe('International Grandmaster');
+    expect(getRankTier(3000).name).toBe('Legendary Grandmaster');
     expect(getProblemUrl(100001, 'A')).toBe('https://codeforces.com/gym/100001/problem/A');
   });
 });

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "CFChart: Codeforces Charts & Practice",
-  "version": "2.0.10",
+  "version": "2.0.11",
   "description": "Enhanced in-page Codeforces rating charts, ML rating forecasts, daily practice streaks, and intelligent problem recommendations.",
   "icons": {
     "16": "icons/icon-16.png",
