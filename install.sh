@@ -85,7 +85,7 @@ INSTALLED_GECKO=0
 INSTALLED_CHROMIUM=0
 
 # 3. Detect and Install for Gecko / Firefox-based Browsers
-# (Firefox, Zen Browser, LibreWolf, Floorp, Waterfox, Tor Browser)
+# (Firefox, Zen Browser, LibreWolf, Floorp, Waterfox)
 GECKO_SEARCH_DIRS=()
 
 if [ "$PLATFORM" = "linux" ]; then

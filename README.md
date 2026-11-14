@@ -83,7 +83,7 @@
 
 * **Shadow DOM encapsulation:** All in-page overlays (`#cfchart-personal-host`, `#cfchart-profile-host`, `#cfchart-problem-host`) mount inside Shadow DOM containers so Codeforces stylesheets and extension styles never collide.
 * **Strict profile vs. personal handle separation:** Visiting another user's Codeforces profile updates only the chart on that page; your personal handle, streak, timer sessions, and recommendations stay isolated to your configured account.
-* **Polite background API queue:** Every Codeforces request flows through a single serialized background worker spacing calls by `2,100 ms` (`credentials: 'omit'`, `20 s` timeout) and caches responses in `storage.local` (`5m` profile, `60s` practice, `24h` problemset catalog). Zero cookies, passwords, API keys, or remote analytics servers are used (see [PRIVACY.md](PRIVACY.md)).
+* **Polite background API queue:** Every Codeforces request flows through a single serialized background worker spacing calls by `2,100 ms` (`credentials: 'omit'`, `20 s` timeout) and caches responses in `storage.local` (`5m` profile, `60s` practice, `24h` problemset catalog). No Codeforces session cookies, passwords, or API keys are ever read; your handle, caches, and practice records stay in local extension storage (see [PRIVACY.md](PRIVACY.md)).
 
 ---
 
@@ -211,6 +211,14 @@ ml/                  # Offline LightGBM collection, training, export, parity che
 public/              # Base MV3 manifest.json and extension icon assets
 scripts/             # Build/packaging pipeline (scripts/build.js) and headless Firefox smoke runner
 ```
+
+---
+
+## Design & Research Notes
+
+* [PROBLEM_TIMER_DESIGN_PLAN.md](docs/PROBLEM_TIMER_DESIGN_PLAN.md): Timer interaction, copy, and accessibility decisions.
+* [PROJECT_UI_UX_REDESIGN_PLAN.md](docs/PROJECT_UI_UX_REDESIGN_PLAN.md): Shared design tokens, surface-by-surface information architecture, and acceptance criteria.
+* [RECOMMENDER_IMPROVEMENT_PLAN.md](docs/RECOMMENDER_IMPROVEMENT_PLAN.md): Measurement ledger, shadow scoring, and the phased path to a learned recommender.
 
 ---
 

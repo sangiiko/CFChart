@@ -52,7 +52,7 @@ function sanitizePreferences(raw: Partial<Preferences>): Preferences {
   const params = raw.predictionParams;
   return {
     personalHandle: raw.personalHandle ? normalizeHandle(raw.personalHandle) : null,
-    dailyTarget: boundedNumber(raw.dailyTarget, 2, 1, 20),
+    dailyTarget: boundedNumber(raw.dailyTarget, 2, 1, 10),
     practiceMinutes: boundedNumber(raw.practiceMinutes, 60, 20, 240),
     practiceMode: raw.practiceMode === 'timed' || raw.practiceMode === 'guided' || raw.practiceMode === 'transfer' ? raw.practiceMode : 'adaptive',
     predictionParams: {
