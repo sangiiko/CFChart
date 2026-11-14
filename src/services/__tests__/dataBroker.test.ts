@@ -389,6 +389,22 @@ describe('review regressions', () => {
     expect(events[0].outcome).toBe('assisted');
     expect(events[1]).toMatchObject({ outcome: 'accepted', assistance: 'unknown', provenance: 'codeforces-api' });
   });
+
+  it('keeps scheduled reviews independent of dailyTarget and daily progress', async () => {
+    const { broker, api, advance, submission } = fixture();
+    await broker.updatePreferences({ personalHandle: 'alice', dailyTarget: 1 });
+    const first = (await broker.getPractice('alice')).recommendations[0];
+    const reviewKey = `${first.contestId}-${first.index}`;
+    await broker.recordPracticeFeedback('alice', { id: 'assisted-1', problemKey: reviewKey, outcome: 'assisted' });
+
+    advance(4 * 86400000);
+    // Satisfy today's dailyTarget=1 with a new outside solve
+    api.fetchSubmissionPage.mockResolvedValue([submission(2999)]);
+    const snap = await broker.getPractice('alice', { force: true });
+    expect(snap.progress.isTodayTargetMet).toBe(true);
+    expect(snap.recommendations.map(r => `${r.contestId}-${r.index}`)).toEqual([reviewKey]);
+    expect(snap.recommendations[0].slot).toBe('revisit');
+  });
 });
 
 it('removes a solve locally across refreshes without hiding a later day or another account', async () => {

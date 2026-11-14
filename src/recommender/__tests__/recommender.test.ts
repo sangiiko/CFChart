@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { selectRecommendationsV2 } from '..';
+import { selectRecommendationsV2, selectScheduledReviews } from '..';
 import { enrichCatalog } from '../catalog';
 import { buildPracticeState } from '../state';
 import { estimateSkill } from '../skill';
@@ -54,6 +54,19 @@ describe('production selector safety and scheduling', () => {
     const review = buildPracticeState([], [], 1400, true, [assisted], now);
     expect(selectRecommendationsV2(catalog(1400), review, 1)[0].slot).toBe('revisit');
     expect(selectRecommendationsV2(catalog(1400), { ...review, events: [event(1, 'assisted', 1)] }, 1)).toEqual([]);
+  });
+  it('retains scheduled reviews across old contests and rating shifts', () => {
+    const oldStart = Math.floor((now - 5 * 365 * 86400000) / 1000);
+    const modernStart = Math.floor((now - 30 * 86400000) / 1000);
+    const mixed = enrichCatalog([problem(1, 1000), problem(2, 1400), problem(3, 1400)], [
+      { id: 1, name: 'Old Round', phase: 'FINISHED', type: 'CF', startTimeSeconds: oldStart },
+      { id: 2, name: 'New Round 1', phase: 'FINISHED', type: 'CF', startTimeSeconds: modernStart },
+      { id: 3, name: 'New Round 2', phase: 'FINISHED', type: 'CF', startTimeSeconds: modernStart },
+    ]);
+    const assisted = event(1, 'assisted', 4);
+    const review = buildPracticeState([], [], 1400, true, [assisted], now);
+    expect(selectScheduledReviews(mixed, review).map(p => p.contestId)).toEqual([1]);
+    expect(selectRecommendationsV2(mixed, review, 3, 120).some(p => p.contestId === 1 && p.slot === 'revisit')).toBe(true);
   });
 });
 

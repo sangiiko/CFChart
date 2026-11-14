@@ -5,7 +5,7 @@ import { codeforcesApi, getProblemUrl, normalizeHandle } from './codeforcesApi';
 import { storageService } from './storage';
 import { calculateHabitProgress } from './habitTracker';
 import { enrichCatalog } from '../recommender/catalog';
-import { selectRecommendationsV2, POLICY_VERSION } from '../recommender';
+import { selectRecommendationsV2, selectScheduledReviews, POLICY_VERSION } from '../recommender';
 import { buildPracticeState, problemKey } from '../recommender/state';
 import { appendEvent, emptyLedger, latestEvents, validateFeedback } from '../recommender/events';
 import { summarizeRecommendationFeedback } from '../recommender/evaluation';
@@ -362,15 +362,20 @@ export function createDataBroker(options: BrokerOptions = {}) {
           const previous = saved?.version === 1 && saved.policy === POLICY_VERSION && saved.day === day ? saved.items : [];
           const latest = latestEvents(ledger.events.filter(e => format(new Date(e.timestamp), 'yyyy-MM-dd') === day));
           const removed = new Set((ledger.removedSolves ?? []).filter(r => r.day === day).map(r => r.problemKey));
+          const earlierAssistedKeys = new Set(
+            ledger.events
+              .filter(e => e.outcome === 'assisted' && format(new Date(e.timestamp), 'yyyy-MM-dd') < day)
+              .map(e => e.problemKey)
+          );
           const finished = previous.filter(p => {
-            if (removed.has(problemKey(p))) return false;
+            if (p.slot === 'revisit' || removed.has(problemKey(p))) return false;
             const event = latest.get(problemKey(p));
-            return event ? !['skipped', 'already-solved'].includes(event.outcome) : p.slot !== 'revisit' && state.solved.has(problemKey(p));
+            return event ? !['skipped', 'already-solved'].includes(event.outcome) : state.solved.has(problemKey(p));
           });
           const seenOutsideKeys = new Set<string>();
           const outsideProblems: RecommendedProblem[] = [];
           for (const e of latest.values()) {
-            if (removed.has(e.problemKey)) continue;
+            if (removed.has(e.problemKey) || earlierAssistedKeys.has(e.problemKey)) continue;
             if (!['skipped', 'already-solved'].includes(e.outcome) && !previous.some(p => problemKey(p) === e.problemKey)) {
               if (!seenOutsideKeys.has(e.problemKey)) {
                 seenOutsideKeys.add(e.problemKey);
@@ -384,8 +389,17 @@ export function createDataBroker(options: BrokerOptions = {}) {
           const pending = previous.filter(p => !allFinished.some(f => problemKey(f) === problemKey(p)) && !latest.has(problemKey(p)));
           const budget = preferences.practiceMinutes ?? 60;
           const remainingDailyTarget = Math.max(0, preferences.dailyTarget - allFinished.length);
-          recommendations = selectRecommendationsV2(enrichCatalog(catalog.value.problems, catalog.value.contests ?? []), state,
-            remainingDailyTarget, budget - spent, pending.filter(p => state.mode === 'adaptive' || !state.mode ? !['timed','guided','transfer'].includes(p.slot) : p.slot === state.mode));
+          const enriched = enrichCatalog(catalog.value.problems, catalog.value.contests ?? []);
+          const reviews = selectScheduledReviews(enriched, state);
+          const reviewKeys = new Set(reviews.map(problemKey));
+          const regular = selectRecommendationsV2(
+            enriched.filter(p => !reviewKeys.has(problemKey(p))),
+            state,
+            remainingDailyTarget,
+            budget - spent,
+            pending.filter(p => p.slot !== 'revisit' && (state.mode === 'adaptive' || !state.mode ? !['timed','guided','transfer'].includes(p.slot) : p.slot === state.mode))
+          );
+          recommendations = [...reviews, ...regular];
           const plan: PracticePlan = { version: 1, policy: POLICY_VERSION, day, budget, target: preferences.dailyTarget,
             items: [...allFinished, ...recommendations] };
           if (JSON.stringify(saved) !== JSON.stringify(plan)) {

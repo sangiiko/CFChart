@@ -18,12 +18,22 @@ export function calculateHabitProgress(
   const cutoffDate = coverage.earliestTime === undefined ? undefined : format(new Date(coverage.earliestTime * 1000), 'yyyy-MM-dd');
   const isUnknownDay = (day: string) => !coverage.complete && (!cutoffDate || day <= cutoffDate);
 
+  const earliestAssistedDate = new Map<string, string>();
+  for (const event of events) {
+    if (event.timestamp > referenceDate.getTime() || event.outcome !== 'assisted') continue;
+    const dateStr = format(new Date(event.timestamp), 'yyyy-MM-dd');
+    const prev = earliestAssistedDate.get(event.problemKey);
+    if (!prev || dateStr < prev) earliestAssistedDate.set(event.problemKey, dateStr);
+  }
+
   for (const sub of submissions) {
     if (sub.verdict !== 'OK' || sub.creationTimeSeconds * 1000 > referenceDate.getTime()) continue;
     const key = getProblemKey(sub.problem.contestId, sub.problem.index);
     // Unidentified tasks cannot safely be deduplicated by their human-readable names.
     if (!key) continue;
     const dateStr = format(new Date(sub.creationTimeSeconds * 1000), 'yyyy-MM-dd');
+    const assistedDay = earliestAssistedDate.get(key);
+    if (assistedDay && assistedDay < dateStr) continue;
     if (!solvedByDate.has(dateStr)) solvedByDate.set(dateStr, new Map());
     const dayMap = solvedByDate.get(dateStr)!;
     const previous = dayMap.get(key);
@@ -39,7 +49,10 @@ export function calculateHabitProgress(
   for (const event of events) {
     if (event.timestamp > referenceDate.getTime()) continue;
     if (!['accepted', 'independent', 'assisted'].includes(event.outcome)) continue;
+    if (event.problem?.slot === 'revisit') continue;
     const dateStr = format(new Date(event.timestamp), 'yyyy-MM-dd');
+    const assistedDay = earliestAssistedDate.get(event.problemKey);
+    if (assistedDay && assistedDay < dateStr) continue;
     if (!solvedByDate.has(dateStr)) solvedByDate.set(dateStr, new Map());
     const dayMap = solvedByDate.get(dateStr)!;
     const previous = dayMap.get(event.problemKey);

@@ -24,8 +24,9 @@ export function selectRecommendationsV2(
   const pinnedKeys = new Set(pinned.map(problemKey));
   // Use only the last three years when that pool can fill the requested session.
   // Otherwise retain older tasks as a fallback, with a score preference for modern ones.
+  // Always retain due scheduled reviews regardless of problem age.
   const candidates = modernItemsNeeded > 0 && modernCandidates.length >= modernItemsNeeded
-    ? allCandidates.filter(candidate => candidate.modern || pinnedKeys.has(problemKey(candidate.item)))
+    ? allCandidates.filter(candidate => candidate.modern || candidate.item.slot === 'revisit' || pinnedKeys.has(problemKey(candidate.item)))
     : allCandidates;
 
   const selected: RecommendedProblem[] = [];
@@ -71,6 +72,20 @@ export function selectRecommendationsV2(
   }
 
   return improveSession(selected, candidates, Math.min(240, budget), new Set(pinned.map(problemKey)));
+}
+
+/** Return due scheduled reviews independently of daily goal and time budget. */
+export function selectScheduledReviews(
+  problems: EnrichedProblem[],
+  state: UserPracticeState
+): RecommendedProblem[] {
+  if (!state.historyComplete) return [];
+  const reviewState: UserPracticeState = state.mode && state.mode !== 'adaptive' ? { ...state, mode: 'adaptive' } : state;
+  const skill = estimateSkill(reviewState);
+  return buildCandidates(problems, reviewState, skill, 60)
+    .filter(c => c.item.slot === 'revisit')
+    .sort((a, b) => b.score - a.score || problemKey(a.item).localeCompare(problemKey(b.item)))
+    .map(c => c.item);
 }
 
 export * from './types';

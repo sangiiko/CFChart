@@ -25,8 +25,9 @@ export function isProblemEligible(
   precomputedLatest?: Map<string, PracticeEvent>
 ): boolean {
   if (!Number.isFinite(p.rating) || !p.contestId) return false;
-  // Bounded eligibility: strictly reject distant difficulty fallbacks first (fastest filter)
-  if (p.rating! < ctx.target - 200 || p.rating! > ctx.target + 300) return false;
+  // Bounded eligibility: strictly reject distant difficulty fallbacks first (fastest filter),
+  // but keep due scheduled reviews even if the user's estimated rating has shifted.
+  if (!ctx.review && (p.rating! < ctx.target - 200 || p.rating! > ctx.target + 300)) return false;
   if (p.contestPhase && p.contestPhase !== 'FINISHED') return false;
   if (p.qualityScore <= 0) return false;
 

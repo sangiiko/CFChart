@@ -32,10 +32,11 @@ export function buildCandidates(
   const latest = latestEvents(state.events.filter(e => e.timestamp <= state.now));
 
   return problems.flatMap(p => {
-    // Fast range pre-check before expensive string/event checks
-    if (!Number.isFinite(p.rating) || p.rating! < target - 200 || p.rating! > target + 300) return [];
-
+    if (!Number.isFinite(p.rating) || !p.contestId) return [];
     const review = isScheduledReview(p, state, latest);
+    // Fast range pre-check for non-review problems before expensive eligibility checks
+    if (!review && (p.rating! < target - 200 || p.rating! > target + 300)) return [];
+
     if (!isProblemEligible(p, state, { target, review }, latest)) return [];
 
     const weakTag = p.tags.find(tag => (skill.tagTheta.get(tag) ?? target) < target - 30);
