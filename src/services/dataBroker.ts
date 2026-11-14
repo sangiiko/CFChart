@@ -384,10 +384,10 @@ export function createDataBroker(options: BrokerOptions = {}) {
             }
           }
           const allFinished = [...finished, ...outsideProblems];
-          const spent = allFinished.reduce((total, p) => total + Math.max(p.plannedMinutes, latest.get(problemKey(p))?.minutes ?? 0), 0)
+          const spent = allFinished.reduce((total, p) => total + p.plannedMinutes, 0)
             + [...latest.values()].filter(e => ['skipped', 'already-solved', 'timeout'].includes(e.outcome)).reduce((total, e) => total + (e.minutes ?? 0), 0);
           const pending = previous.filter(p => !allFinished.some(f => problemKey(f) === problemKey(p)) && !latest.has(problemKey(p)));
-          const budget = preferences.practiceMinutes ?? 60;
+          const budget = Math.max(preferences.practiceMinutes ?? 60, preferences.dailyTarget * 30);
           const remainingDailyTarget = Math.max(0, preferences.dailyTarget - allFinished.length);
           const enriched = enrichCatalog(catalog.value.problems, catalog.value.contests ?? []);
           const reviews = selectScheduledReviews(enriched, state);

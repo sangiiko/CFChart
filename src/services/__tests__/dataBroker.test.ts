@@ -420,6 +420,27 @@ describe('review regressions', () => {
     expect(after.progress.todayCount).toBe(0);
     expect(after.recommendations.length).toBeGreaterThan(0);
   });
+
+  it('keeps remaining daily-goal recommendations when 1 of 3 is solved even with default 60m budget', async () => {
+    const { broker, api, submission } = fixture();
+    api.fetchProblemCatalog.mockResolvedValue([
+      { contestId: 10, index: 'A', name: 'T1', rating: 1400, tags: [] },
+      { contestId: 11, index: 'A', name: 'T2', rating: 1400, tags: [] },
+      { contestId: 12, index: 'A', name: 'T3', rating: 1400, tags: [] },
+    ]);
+    await broker.updatePreferences({ personalHandle: 'alice', dailyTarget: 3, practiceMinutes: 60 });
+    const first = (await broker.getPractice('alice')).recommendations[0];
+    await broker.recordPracticeFeedback('alice', {
+      id: 'solve-1',
+      problemKey: `${first.contestId}-${first.index}`,
+      outcome: 'independent',
+      minutes: 50,
+    });
+    api.fetchSubmissionPage.mockResolvedValue([{ ...submission(3000), problem: first }]);
+    const after = await broker.getPractice('alice', { force: true });
+    expect(after.progress.todayCount).toBe(1);
+    expect(after.recommendations).toHaveLength(2);
+  });
 });
 
 it('removes a solve locally across refreshes without hiding a later day or another account', async () => {
