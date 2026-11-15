@@ -14,7 +14,7 @@ h2{font-size:16px;line-height:1.35}
 h3{font-size:15px;line-height:1.4}
 p+p{margin-top:8px}
 
-.practice-app{width:min(380px,100vw);min-height:280px;padding:20px;background:var(--cf-surface)}
+.practice-app{width:380px;min-height:280px;padding:20px;background:var(--cf-surface)}
 .practice-app--page{width:min(1080px,100%);min-height:100vh;margin:0 auto;padding:32px 28px;background:transparent}
 .app-header{display:flex;align-items:center;gap:11px;padding-bottom:16px;border-bottom:1px solid var(--cf-border)}
 .app-header p{margin-top:2px;color:var(--cf-muted);font-size:12px}
