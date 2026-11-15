@@ -85,14 +85,28 @@ try {
                 Copy-Item -Path $XpiFile -Destination (Join-Path $ExtDir "$ExtensionId.xpi") -Force
 
                 $UserJs = Join-Path $Prof.FullName "user.js"
-                $Pref = 'user_pref("xpinstall.signatures.required", false);'
-                if (Test-Path $UserJs) {
-                    $Content = Get-Content $UserJs -Raw
-                    if ($Content -notmatch "xpinstall\.signatures\.required") {
-                        Add-Content -Path $UserJs -Value "`n$Pref"
+                # Zen and most Gecko forks already default signatures.required to false;
+                # Firefox ESR/release need it to load a self-hosted, unsigned XPI.
+                # autoDisableScopes must drop the profile bit (1) or the add-on is
+                # registered but force-disabled and never shows up after a restart.
+                $Prefs = @(
+                    'user_pref("xpinstall.signatures.required", false);',
+                    'user_pref("extensions.autoDisableScopes", 14);'
+                )
+                $Content = if (Test-Path $UserJs) { Get-Content $UserJs -Raw } else { "" }
+                foreach ($Pref in $Prefs) {
+                    $PrefName = [regex]::Match($Pref, 'user_pref\("([^"]+)"').Groups[1].Value
+                    if ($Content -notmatch [regex]::Escape($PrefName)) {
+                        Add-Content -Path $UserJs -Value $Pref
                     }
-                } else {
-                    Set-Content -Path $UserJs -Value $Pref
+                }
+
+                # A userDisabled add-on is never re-enabled by a pref change; drop the
+                # add-on database to force a rescan with the new scopes in effect.
+                $ExtJson = Join-Path $Prof.FullName "extensions.json"
+                if ((Test-Path $ExtJson) -and (Select-String -Path $ExtJson -SimpleMatch $ExtensionId -Quiet)) {
+                    Remove-Item -Path $ExtJson -Force -ErrorAction SilentlyContinue
+                    Remove-Item -Path (Join-Path $Prof.FullName "addonStartup.json.lz4") -Force -ErrorAction SilentlyContinue
                 }
 
                 Write-Host "[OK] Installed for $BrowserName profile: $($Prof.Name)" -ForegroundColor Green
@@ -124,8 +138,8 @@ try {
     if ($InstalledGecko -gt 0) {
         Write-Host "🦊 Firefox / Zen / LibreWolf / Floorp:" -ForegroundColor Yellow
         Write-Host "   • Đã cài đặt thành công vào $InstalledGecko profile."
-        Write-Host "   • Đã tự động cấu hình bypass chữ ký trong user.js."
-        Write-Host "   • Chỉ cần khởi động lại trình duyệt để kích hoạt!`n" -ForegroundColor Cyan
+        Write-Host "   • Đã bật extensions.autoDisableScopes=14 trong user.js để cho phép cài ngoài addons.mozilla.org."
+        Write-Host "   • Thoát hẳn trình duyệt (không chỉ đóng cửa sổ) rồi mở lại để kích hoạt!`n" -ForegroundColor Cyan
     }
 
     Write-Host "🌐 Chrome / Brave / Edge / Chromium:" -ForegroundColor Yellow

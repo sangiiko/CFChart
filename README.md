@@ -126,9 +126,11 @@ Detects supported Gecko profiles (**Firefox**, **Zen Browser**, **LibreWolf**, *
 #### Firefox (`140.0+`)
 
 * **Automatic updates via `.xpi` (Recommended):**
-  1. Download `cfchart.xpi` from the [Latest Release](https://github.com/sangiiko/CFChart/releases/latest).
+  1. Download `cfchart.xpi` from the [Latest Release](https://github.com/sangiiko/CFChart/releases/latest). The file is a release asset, not a repo file.
   2. Open `about:addons`, click the gear icon → **Install Add-on From File…**, and choose `cfchart.xpi`.
   3. Future GitHub releases update automatically via `updates.json`.
+
+  The published `.xpi` is **unsigned**, so it only installs on Firefox Developer Edition, Nightly, or ESR. On Firefox Release/Beta use the temporary add-on below. On Zen, LibreWolf, Floorp, and Waterfox set `extensions.autoDisableScopes` to `14` in the profile's `user.js` (the installer does this for you), otherwise the add-on is registered but force-disabled.
 
 * **Temporary Add-on (from source):**
   1. Run `npm install && npm run build`.
@@ -161,7 +163,7 @@ Explore the training, backtesting, parity checks, and top-10,000 cohort research
 
 ### Prerequisites
 
-* **Node.js** 18+ (CI uses Node 22) and `npm`
+* **Node.js** 18+ (CI uses Node 22) and `npm`. No external `zip` binary is needed; packaging is done in `scripts/build.js`.
 * *(Optional, for ML or browser smoke tests)* **Python** 3.10+
 
 ### Available Scripts

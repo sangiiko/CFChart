@@ -118,6 +118,18 @@ elif [ "$PLATFORM" = "windows" ]; then
   )
 fi
 
+# Append a pref to user.js unless that exact pref is already set there.
+ensure_pref_in() {
+  local user_js="$1"
+  local name="$2"
+  local value="$3"
+  if grep -qF "\"$name\"" "$user_js" 2>/dev/null; then
+    return
+  fi
+  mkdir -p "$(dirname "$user_js")"
+  printf 'user_pref("%s", %s);\n' "$name" "$value" >> "$user_js"
+}
+
 install_gecko_profile() {
   local prof_dir="$1"
   local browser_name="$2"
@@ -126,15 +138,18 @@ install_gecko_profile() {
   mkdir -p "$ext_dir"
   cp -f "$XPI_FILE" "$ext_dir/${EXTENSION_ID}.xpi"
 
-  # Ensure user.js allows unverified self-hosted extensions
   local user_js="$prof_dir/user.js"
-  local pref_line='user_pref("xpinstall.signatures.required", false);'
-  if [ -f "$user_js" ]; then
-    if ! grep -q "xpinstall.signatures.required" "$user_js"; then
-      echo -e "\n$pref_line" >> "$user_js"
-    fi
-  else
-    echo "$pref_line" > "$user_js"
+  # Zen and most Gecko forks already default this to false; Firefox ESR and
+  # release builds need it to load a self-hosted, unsigned XPI.
+  ensure_pref_in "$user_js" "xpinstall.signatures.required" "false"
+  # Without this the profile-scope add-on (extensions/ in the profile) is
+  # registered but force-disabled, so it never appears after a restart.
+  ensure_pref_in "$user_js" "extensions.autoDisableScopes" "14"
+
+  # An add-on recorded as userDisabled is never re-enabled by a pref change.
+  # Dropping the add-on database forces a rescan that picks up the new scopes.
+  if grep -qF "\"${EXTENSION_ID}\"" "$prof_dir/extensions.json" 2>/dev/null; then
+    rm -f "$prof_dir/extensions.json" "$prof_dir/addonStartup.json.lz4"
   fi
 
   log_ok "Installed for ${BOLD}${browser_name}${RESET} profile: $(basename "$prof_dir")"
@@ -247,8 +262,8 @@ echo ""
 if [ $INSTALLED_GECKO -gt 0 ]; then
   echo -e "🦊 ${BOLD}Firefox / Zen / LibreWolf / Floorp:${RESET}"
   echo -e "   • Đã cài đặt thành công vào ${GREEN}${INSTALLED_GECKO}${RESET} profile."
-  echo -e "   • Đã tự động cấu hình bypass chữ ký trong ${CYAN}user.js${RESET}."
-  echo -e "   • ${YELLOW}Chỉ cần khởi động lại trình duyệt để kích hoạt!${RESET}"
+  echo -e "   • Đã bật ${CYAN}extensions.autoDisableScopes=14${RESET} trong ${CYAN}user.js${RESET} để cho phép cài ngoài addons.mozilla.org."
+  echo -e "   • ${YELLOW}Thoát hẳn trình duyệt (không chỉ đóng cửa sổ) rồi mở lại để kích hoạt!${RESET}"
   echo ""
 fi
 

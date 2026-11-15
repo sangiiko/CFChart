@@ -5,6 +5,73 @@ import { resolve } from 'node:path';
 import { build as bundle } from 'esbuild';
 import { build as buildPages } from 'vite';
 
+// Node-only zip so the build never depends on a system `zip` binary.
+import { deflateRawSync } from 'node:zlib';
+function writeZip(outFile, rootDir) {
+  const files = [];
+  (function walk(dir) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = resolve(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else files.push(full);
+    }
+  })(rootDir);
+  files.sort();
+  const locals = [];
+  const central = [];
+  let offset = 0;
+  for (const file of files) {
+    const name = Buffer.from(file.slice(rootDir.length + 1).split('\\').join('/'));
+    const data = readFileSync(file);
+    const packed = deflateRawSync(data);
+    const crc = crc32(data);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(0x0800, 6);
+    local.writeUInt16LE(8, 8);
+    local.writeUInt32LE(0, 10);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(packed.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(name.length, 26);
+    local.writeUInt16LE(0, 28);
+    const header = Buffer.alloc(46);
+    header.writeUInt32LE(0x02014b50, 0);
+    header.writeUInt16LE(20, 4);
+    header.writeUInt16LE(20, 6);
+    header.writeUInt16LE(0x0800, 8);
+    header.writeUInt16LE(8, 10);
+    header.writeUInt32LE(0, 12);
+    header.writeUInt32LE(crc, 16);
+    header.writeUInt32LE(packed.length, 20);
+    header.writeUInt32LE(data.length, 24);
+    header.writeUInt16LE(name.length, 28);
+    header.writeUInt32LE(offset, 42);
+    locals.push(local, name, packed);
+    central.push(header, name);
+    offset += 30 + name.length + packed.length;
+  }
+  const dir = Buffer.concat(central);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(files.length, 8);
+  end.writeUInt16LE(files.length, 10);
+  end.writeUInt32LE(dir.length, 12);
+  end.writeUInt32LE(offset, 16);
+  writeFileSync(outFile, Buffer.concat([...locals, dir, end]));
+}
+const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
+  let c = n;
+  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  return c >>> 0;
+});
+function crc32(buf) {
+  let c = 0xffffffff;
+  for (const byte of buf) c = CRC_TABLE[(c ^ byte) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
 // Sources stay sources. Vite cleans dist/ and copies the one public manifest.
 execFileSync(resolve('node_modules/.bin/tsc'), ['--noEmit'], { stdio: 'inherit' });
 await buildPages();
@@ -45,14 +112,14 @@ writeFileSync('dist-chrome/manifest.json', JSON.stringify(chromeManifest, null, 
 
 // Package Firefox .xpi
 try {
-  execFileSync('zip', ['-r', '-FS', '-q', resolve('cfchart.xpi'), '.'], { cwd: resolve('dist'), stdio: 'inherit' });
+  writeZip(resolve('cfchart.xpi'), resolve('dist'));
 } catch (error) {
   throw new Error('Could not create cfchart.xpi', { cause: error });
 }
 
 // Package Chrome .zip
 try {
-  execFileSync('zip', ['-r', '-FS', '-q', resolve('cfchart-chrome.zip'), '.'], { cwd: resolve('dist-chrome'), stdio: 'inherit' });
+  writeZip(resolve('cfchart-chrome.zip'), resolve('dist-chrome'));
 } catch (error) {
   throw new Error('Could not create cfchart-chrome.zip', { cause: error });
 }
