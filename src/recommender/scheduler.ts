@@ -1,6 +1,7 @@
 import type { RecommendedProblem } from '../types/codeforces';
 import type { Candidate } from './types';
 import { problemKey } from './state';
+import { MAX_DAILY_REVIEWS } from './retention';
 
 /** Multi-tag overlap penalty: 0.15 for 1 shared tag, +0.05 per additional shared tag. */
 export function tagOverlapPenalty(tagsA: readonly string[], tagsB: readonly string[]): number {
@@ -47,6 +48,7 @@ export function improveSession(
       for (const candidate of pool) {
         if (plan.some(c => problemKey(c.item) === problemKey(candidate.item))) continue;
         const next = plan.map((c, j) => (j === i ? candidate : c));
+        if (next.filter(c => c.item.slot === 'revisit').length > MAX_DAILY_REVIEWS) continue;
         if (next.reduce((s, c) => s + c.item.plannedMinutes, 0) > budget) continue;
         const utility = sessionUtility(next);
         if (utility > value + 1e-9) {

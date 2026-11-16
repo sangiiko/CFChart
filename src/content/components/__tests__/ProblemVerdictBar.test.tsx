@@ -43,4 +43,21 @@ describe('problem outcome and timer handoff', () => {
     expect(container.querySelector('[data-testid="timer-pause-btn"]')).not.toBeNull();
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('Could not save');
   });
+
+  it('supports Independent review mode with graduation and dismissal controls', async () => {
+    await act(async () =>
+      root.render(<ProblemVerdictBar handle="alice" contestId={200} index="A" isReview />)
+    );
+    expect(container.textContent).toContain('Independent review');
+    const dismissBtn = [...container.querySelectorAll('.cf-verdict-btn')].find(
+      button => button.textContent === 'Dismiss review'
+    ) as HTMLButtonElement;
+    expect(dismissBtn).toBeDefined();
+    await act(async () => dismissBtn.click());
+    expect(client.recordPracticeFeedback).toHaveBeenCalledWith(
+      'alice',
+      expect.objectContaining({ problemKey: '200-A', outcome: 'already-solved' })
+    );
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('Review dismissed');
+  });
 });

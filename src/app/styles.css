@@ -83,12 +83,19 @@ progress::-webkit-progress-value{background:var(--cf-blue)}
 .practice-session-heading{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:9px}
 .practice-session-heading span{color:var(--cf-muted);font-size:12px}
 .practice-task{margin-bottom:10px;padding:15px;border:1px solid var(--cf-border);border-radius:var(--cf-radius);background:var(--cf-surface)}
-.practice-task-meta{display:flex;flex-wrap:wrap;gap:4px 10px;margin-bottom:7px;color:var(--cf-muted);font-size:11px}
+.practice-task--revisit{border-color:#d9c8a9;background:#fffdf8}
+.practice-task-meta{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin-bottom:7px;color:var(--cf-muted);font-size:11px}
+.practice-task-badge--revisit{padding:1px 6px;border:1px solid #e4c78f;border-radius:4px;background:#fff7e8;color:#765319;font-weight:650}
 .practice-task h3{margin-bottom:5px;overflow-wrap:anywhere}
 .practice-task-reason{color:var(--cf-muted);font-size:12px}
-.practice-task-open{display:inline-flex;align-items:center;justify-content:center;min-height:38px;margin-top:12px;padding:8px 13px;border:1px solid var(--cf-blue);border-radius:7px;background:var(--cf-blue);color:#fff;font-size:12px;font-weight:700;text-decoration:none}
+.practice-task-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px}
+.practice-task-open{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:8px 13px;border:1px solid var(--cf-blue);border-radius:7px;background:var(--cf-blue);color:#fff;font-size:12px;font-weight:700;text-decoration:none}
 .practice-task-open:hover{background:var(--cf-blue-hover);text-decoration:none}
 .practice-task-open span{margin-left:6px}
+.practice-review-controls{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px}
+.practice-review-btn{min-height:34px;padding:6px 10px;border:1px solid var(--cf-border);border-radius:6px;background:var(--cf-surface);color:var(--cf-text);font-size:11px;font-weight:600}
+.practice-review-btn:hover{border-color:#9fb4c8;background:var(--cf-soft)}
+.practice-review-btn--muted{color:var(--cf-muted)}
 .practice-more-button{min-height:36px;padding:6px 2px;border:0;background:transparent;color:var(--cf-blue);font-size:12px;font-weight:600}
 .practice-more-button:hover{text-decoration:underline}
 .practice-session>.cf-empty{padding:18px;border:1px solid var(--cf-border);border-radius:var(--cf-radius);color:var(--cf-muted)}

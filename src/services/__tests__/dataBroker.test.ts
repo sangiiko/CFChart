@@ -545,6 +545,69 @@ describe('review regressions', () => {
     expect(backfilledSolveB?.outcome).toBe('accepted');
     expect(exported.recommendationFeedback.shadowPredictionMean).not.toBeNull();
   });
+
+  it('caps daily scheduled reviews at 1, graduates reviews on later Codeforces solves, and stops after 1 review action per day', async () => {
+    const { broker, api, advance, submission } = fixture();
+    api.fetchProblemCatalog.mockResolvedValue([
+      { contestId: 10, index: 'A', name: 'R1', rating: 1400, tags: ['dp'] },
+      { contestId: 11, index: 'A', name: 'R2', rating: 1400, tags: ['graphs'] },
+      { contestId: 12, index: 'A', name: 'R3', rating: 1400, tags: ['trees'] },
+      { contestId: 13, index: 'A', name: 'R4', rating: 1400, tags: ['math'] },
+      { contestId: 14, index: 'A', name: 'R5', rating: 1400, tags: ['greedy'] },
+      { contestId: 15, index: 'A', name: 'Core1', rating: 1400, tags: ['strings'] },
+    ]);
+    await broker.updatePreferences({ personalHandle: 'alice', dailyTarget: 1 });
+    await broker.getPractice('alice');
+
+    // Record 5 assisted solves across the catalog
+    for (const id of [10, 11, 12, 13, 14]) {
+      await broker.recordPracticeFeedback('alice', {
+        id: `assist-${id}`,
+        problemKey: `${id}-A`,
+        outcome: 'assisted',
+      });
+    }
+
+    // Advance 4 days so all 5 become due
+    advance(4 * 86400000);
+    const dueSnap = await broker.getPractice('alice', { force: true });
+    const dueReviews = dueSnap.recommendations.filter(r => r.slot === 'revisit');
+    // Strictly capped to 1 review per day instead of flooding all 5
+    expect(dueReviews).toHaveLength(1);
+    const activeReview = dueReviews[0];
+    const activeReviewKey = `${activeReview.contestId}-${activeReview.index}`;
+
+    // Completing or snoozing today's 1 review fulfills today's review quota (no 2nd review pushed today)
+    await broker.recordPracticeFeedback('alice', {
+      id: 'snooze-today-review',
+      problemKey: activeReviewKey,
+      outcome: 'skipped',
+    });
+    const afterActionSnap = await broker.getPractice('alice', { force: true });
+    expect(afterActionSnap.recommendations.filter(r => r.slot === 'revisit')).toHaveLength(0);
+
+    // Next day, another due review is surfaced; solving it on Codeforces graduates it permanently
+    advance(86400000);
+    const nextDaySnap = await broker.getPractice('alice', { force: true });
+    const nextReview = nextDaySnap.recommendations.find(r => r.slot === 'revisit')!;
+    expect(nextReview).toBeDefined();
+
+    api.fetchSubmissionPage.mockResolvedValue([
+      {
+        ...submission(3000),
+        problem: { contestId: nextReview.contestId, index: nextReview.index, name: nextReview.name, rating: nextReview.rating, tags: nextReview.tags },
+      },
+    ]);
+    const afterCfSolve = await broker.getPractice('alice', { force: true });
+    expect(afterCfSolve.recommendations.filter(r => r.slot === 'revisit')).toHaveLength(0);
+
+    // Even 4 days after the Codeforces review re-solve, the graduated problem does not return as a zombie review
+    advance(4 * 86400000);
+    const fourDaysLater = await broker.getPractice('alice', { force: true });
+    expect(
+      fourDaysLater.recommendations.some(r => r.contestId === nextReview.contestId && r.index === nextReview.index)
+    ).toBe(false);
+  });
 });
 
 it('removes a solve locally across refreshes without hiding a later day or another account', async () => {

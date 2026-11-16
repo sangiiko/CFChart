@@ -9,7 +9,7 @@ import modelJson from './acceptance-model.json';
 import { buildAcceptanceFeaturesFromHistory } from './features';
 import { predictHistoricalAcceptanceModel, type AcceptanceModel } from './inference';
 import { selectMostInformativeWeakTag, transferSimilarityScore } from './semantic';
-import { estimateMemoryState } from './retention';
+import { estimateMemoryState, evaluateReviewState } from './retention';
 import { problemKey } from './state';
 
 const shadowModel = Object.freeze(modelJson) as AcceptanceModel;
@@ -53,7 +53,15 @@ export function buildCandidates(
     const plannedMinutes =
       slot === 'revisit' ? 20 : slot === 'stretch' ? 40 : Math.min(30, Math.max(20, Math.floor(budget)));
 
-    const reasons = explainRecommendation({ slot, target, plannedMinutes, weakTag });
+    const key = problemKey(p);
+    const reviewStatus = review ? evaluateReviewState(key, pastEvents, state.now) : null;
+    const reasons = explainRecommendation({
+      slot,
+      target,
+      plannedMinutes,
+      weakTag,
+      ...(reviewStatus ? { reviewElapsedDays: reviewStatus.daysSinceAssisted } : {}),
+    });
 
     const item: RecommendedProblem = {
       contestId: p.contestId!,
@@ -78,7 +86,7 @@ export function buildCandidates(
 
     let bonus = 0;
     if (review) {
-      const memory = estimateMemoryState(problemKey(p), pastEvents, state.now, p.rating!, state.recentRating);
+      const memory = estimateMemoryState(key, pastEvents, state.now, p.rating!, state.recentRating);
       bonus = 0.5 + 0.15 * memory.urgency;
     } else if (upsolve) {
       bonus = 0.35;

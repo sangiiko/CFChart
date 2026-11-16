@@ -5,7 +5,14 @@ import { codeforcesApi, getProblemUrl, normalizeHandle } from './codeforcesApi';
 import { storageService } from './storage';
 import { calculateHabitProgress } from './habitTracker';
 import { enrichCatalog, computeProblemQuality } from '../recommender/catalog';
-import { selectRecommendationsV2, selectScheduledReviews, POLICY_VERSION } from '../recommender';
+import {
+  selectRecommendationsV2,
+  selectScheduledReviews,
+  isScheduledReview,
+  POLICY_VERSION,
+  MAX_DAILY_REVIEWS,
+  SAME_SESSION_ACCEPTANCE_WINDOW_MS,
+} from '../recommender';
 import { buildPracticeState, problemKey } from '../recommender/state';
 import { prepareAcceptanceHistory, buildAcceptanceFeaturesFromHistory } from '../recommender/features';
 import { predictHistoricalAcceptanceModel, type AcceptanceModel } from '../recommender/inference';
@@ -341,6 +348,15 @@ export function createDataBroker(options: BrokerOptions = {}) {
             const key = problemKey(p);
             const okSub = okSubmissionsByKey.get(key);
             if (okSub) {
+              const subMs = okSub.creationTimeSeconds * 1000;
+              if (p.slot === 'revisit') {
+                const lastAssistedAt = currentEvents
+                  .filter(e => e.problemKey === key && e.outcome === 'assisted')
+                  .reduce((max, e) => Math.max(max, e.timestamp), 0);
+                if (lastAssistedAt > 0 && subMs - lastAssistedAt < SAME_SESSION_ACCEPTANCE_WINDOW_MS) {
+                  continue;
+                }
+              }
               const hasExisting = currentEvents.some(
                 e => e.id === `cf-api:${key}:${okSub.id}`
               );
@@ -350,7 +366,7 @@ export function createDataBroker(options: BrokerOptions = {}) {
                   version: 1,
                   problemKey: key,
                   outcome: 'accepted',
-                  timestamp: okSub.creationTimeSeconds * 1000,
+                  timestamp: subMs,
                   problem: p,
                   provenance: 'codeforces-api',
                   assistance: 'unknown',
@@ -487,10 +503,19 @@ export function createDataBroker(options: BrokerOptions = {}) {
           const pending = previous.filter(p => !allFinished.some(f => problemKey(f) === problemKey(p)) && !latest.has(problemKey(p)));
           const budget = Math.max(preferences.practiceMinutes ?? 60, preferences.dailyTarget * 30);
           const remainingDailyTarget = Math.max(0, preferences.dailyTarget - allFinished.length);
-          const reviews = selectScheduledReviews(enriched, state);
+          const formatLocalDay = (ms: number) => format(new Date(ms), 'yyyy-MM-dd');
+          const pinnedReviewKeys = new Set(previous.filter(p => p.slot === 'revisit').map(problemKey));
+          const reviews = selectScheduledReviews(enriched, state, {
+            maxReviews: MAX_DAILY_REVIEWS,
+            pinnedKeys: pinnedReviewKeys,
+            day,
+            formatDay: formatLocalDay,
+            removedSolves: ledger.removedSolves,
+          });
           const reviewKeys = new Set(reviews.map(problemKey));
+          const allLatest = latestEvents(state.events.filter(e => e.timestamp <= state.now));
           const regular = selectRecommendationsV2(
-            enriched.filter(p => !reviewKeys.has(problemKey(p))),
+            enriched.filter(p => !reviewKeys.has(problemKey(p)) && !isScheduledReview(p, state, allLatest)),
             state,
             remainingDailyTarget,
             budget - spent,
@@ -501,7 +526,14 @@ export function createDataBroker(options: BrokerOptions = {}) {
             items: [...allFinished, ...recommendations] };
           if (JSON.stringify(saved) !== JSON.stringify(plan)) {
             // Log assignments, not inferred views/clicks. IDs make retries idempotent.
-            const assignments = [...(ledger.assignments ?? [])];
+            // Prune any excess same-day revisit assignments that were superseded by the daily review cap.
+            const activeTodayKeys = new Set([
+              ...plan.items.map(problemKey),
+              ...latest.keys(),
+            ]);
+            const assignments = (ledger.assignments ?? []).filter(
+              a => !(a.problem.slot === 'revisit' && a.id.includes(`:${day}:`) && !activeTodayKeys.has(problemKey(a.problem)))
+            );
             for (const problem of recommendations) {
               const id = `${POLICY_VERSION}:${day}:${problemKey(problem)}:${problem.slot}:${problem.plannedMinutes}`;
               const existingIdx = assignments.findIndex(a => a.id === id);

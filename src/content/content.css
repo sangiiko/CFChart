@@ -120,11 +120,18 @@
 .cf-popover .practice-session-heading h2{font-size:15px}
 .cf-popover .practice-session-heading span{color:var(--cf-muted);font-size:11px}
 .cf-popover .practice-task{margin:0 0 10px;padding:13px;border:1px solid var(--cf-border);border-radius:var(--cf-radius);background:var(--cf-surface)}
-.cf-popover .practice-task-meta{display:flex;flex-wrap:wrap;gap:4px 9px;margin-bottom:6px;color:var(--cf-muted);font-size:11px}
+.cf-popover .practice-task--revisit{border-color:#d9c8a9;background:#fffdf8}
+.cf-popover .practice-task-meta{display:flex;flex-wrap:wrap;align-items:center;gap:4px 9px;margin-bottom:6px;color:var(--cf-muted);font-size:11px}
+.cf-popover .practice-task-badge--revisit{padding:1px 6px;border:1px solid #e4c78f;border-radius:4px;background:#fff7e8;color:#765319;font-weight:650}
 .cf-popover .practice-task h3{margin:0 0 4px;font-size:14px;overflow-wrap:anywhere}
 .cf-popover .practice-task-reason{color:var(--cf-muted);font-size:12px}
-.cf-popover .practice-task-open{display:inline-flex;align-items:center;justify-content:center;min-height:36px;margin-top:10px;padding:7px 11px;border:1px solid var(--cf-blue);border-radius:6px;background:var(--cf-blue);color:#fff;font-size:12px;font-weight:650;text-decoration:none}
+.cf-popover .practice-task-actions{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-top:10px}
+.cf-popover .practice-task-open{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:7px 11px;border:1px solid var(--cf-blue);border-radius:6px;background:var(--cf-blue);color:#fff;font-size:12px;font-weight:650;text-decoration:none}
 .cf-popover .practice-task-open:hover{background:var(--cf-blue-hover)}
+.cf-popover .practice-review-controls{display:inline-flex;flex-wrap:wrap;align-items:center;gap:5px}
+.cf-popover .practice-review-btn{min-height:32px;padding:5px 9px;border:1px solid var(--cf-border);border-radius:6px;background:var(--cf-surface);color:var(--cf-text);font-size:11px;font-weight:600}
+.cf-popover .practice-review-btn:hover{border-color:#9fb4c8;background:var(--cf-soft)}
+.cf-popover .practice-review-btn--muted{color:var(--cf-muted)}
 .cf-popover .practice-more-button{min-height:34px;padding:5px 0;border:0;background:transparent;color:var(--cf-blue);font-size:12px;font-weight:600}
 
 /* Problem outcome aligns with the timer */
@@ -132,8 +139,10 @@
 .cf-verdict-label{margin-right:auto;color:var(--cf-muted);font-size:12px;font-weight:650}
 .cf-verdict-btn{min-height:35px;padding:7px 11px;border:1px solid var(--cf-border);border-radius:6px;background:var(--cf-surface);color:var(--cf-text);font-size:12px;font-weight:600}
 .cf-verdict-btn:hover{border-color:#9fb4c8;background:var(--cf-soft)}
+.cf-verdict-btn--muted{color:var(--cf-muted)}
 .cf-verdict-btn.is-solved{border-color:#add6bd;background:#eaf6ee;color:#206a43}
-.cf-verdict-btn.is-assisted{border-color:#e4c78f;background:#fff7e8;color:#765319}
+.cf-verdict-btn.is-assisted{border-color:#e4c78f;background:#fff7e8;color:#765309}
+.cf-verdict-btn.is-dismissed{border-color:#cbd5e1;background:#f1f5f9;color:#475569}
 .cf-verdict-status{flex-basis:100%;margin:0;color:var(--cf-green);font-size:11px}
 .cf-verdict-status[role=alert]{color:#a94432}
 @container(max-width:360px){.cf-problem-verdict-bar{align-items:stretch;flex-direction:column}.cf-verdict-label{margin:0}.cf-verdict-status{flex-basis:auto}}

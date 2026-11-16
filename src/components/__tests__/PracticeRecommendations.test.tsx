@@ -48,4 +48,19 @@ describe('practice recommendation UI', () => {
     expect(container.textContent).toContain('No tasks remain');
     expect(container.querySelector('.practice-task')).toBeNull();
   });
+
+  it('provides direct Mark reviewed, Snooze 7d, and Dismiss actions on revisit cards when handle is present', async () => {
+    const revisitProblem: RecommendedProblem = {
+      ...problem,
+      slot: 'revisit',
+      slotLabel: 'Independent review',
+      reasons: ['Solved with help 4 days ago; re-solve independently to lock in the idea.'],
+    };
+    await act(async () =>
+      root.render(<PracticeRecommendations handle="alice" recommendations={[revisitProblem, problem]} />)
+    );
+    expect(container.textContent).toContain('Independent review');
+    const buttons = [...container.querySelectorAll('.practice-review-btn')].map(b => b.textContent);
+    expect(buttons).toEqual(['Mark reviewed', 'Snooze 7d', 'Dismiss']);
+  });
 });

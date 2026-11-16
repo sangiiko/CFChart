@@ -204,4 +204,37 @@ describe('in-page content integration', () => {
     await start();
     expect(shadow('cfchart-problem-host').querySelector('.cf-problem-verdict-bar')).not.toBeNull();
   });
+  it('mounts ProblemVerdictBar in Independent review mode for an earlier-day assisted problem without locking Solved with help', async () => {
+    history.replaceState({}, '', '/problemset/problem/2000/C');
+    document.body.innerHTML = '<div id="header"><div class="lang-chooser"><a href="/profile/myHandle">myHandle</a><a href="/logout">Logout</a></div></div><div id="pageContent"><div class="problem-statement"><div class="header"><div class="title">C. Test Problem</div></div></div></div>';
+    const fourDaysAgo = Date.now() - 4 * 86_400_000;
+    client.getPractice.mockResolvedValue({
+      ...practice,
+      submissions: [{ id: 1, contestId: 2000, creationTimeSeconds: Math.floor(fourDaysAgo / 1000), problem: { contestId: 2000, index: 'C', name: 'Test Problem', tags: [] }, verdict: 'OK' }],
+    });
+    client.exportPracticeData.mockResolvedValueOnce({
+      version: 1,
+      handle: 'myHandle',
+      ledger: {
+        version: 1,
+        events: [
+          {
+            id: 'assist-old',
+            version: 1,
+            problemKey: '2000-C',
+            outcome: 'assisted',
+            timestamp: fourDaysAgo,
+            provenance: 'self-report',
+            problem: { contestId: 2000, index: 'C', name: 'Test Problem', rating: 1400, tags: [], slot: 'core', slotLabel: 'Core', pSolve: null, plannedMinutes: 30, reasons: [], qualityScore: 1, url: '' },
+          } as never,
+        ],
+      },
+    });
+    await start();
+    const verdictBar = shadow('cfchart-problem-host').querySelector('.cf-problem-verdict-bar')!;
+    expect(verdictBar.textContent).toContain('Independent review');
+    expect(verdictBar.textContent).toContain('Dismiss review');
+    const assistedBtn = Array.from(verdictBar.querySelectorAll('button')).find(b => b.textContent === 'Solved with help')!;
+    expect(assistedBtn.disabled).toBe(false);
+  });
 });

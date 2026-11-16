@@ -8,6 +8,7 @@ import { ProblemTimerWidget } from './components/ProblemTimerWidget';
 import { headerAnchor, profileAnchor, profileHandle, ratingGraph, preserveNativeGraph, viewerHandle, parseProblemPath, problemHeaderAnchor, hasAcceptedVerdictInPage } from './dom';
 import type { PracticeLedger } from '../recommender/types';
 import { latestEvents } from '../recommender/events';
+import { evaluateReviewState } from '../recommender/retention';
 import contentStyles from './content.css';
 import uiTokens from '../ui/tokens.css';
 
@@ -118,8 +119,22 @@ export function startCFChart() {
             s => s.verdict === 'OK' && s.problem?.contestId === problemInfo.contestId && s.problem?.index?.toUpperCase() === problemInfo.index
           );
           const isAccepted = isPageAccepted || Boolean(isHistoryAccepted);
-          const existingEvent = latestEvents(data?.ledger?.events?.filter(e => e.provenance === 'self-report') ?? []).get(problemKeyStr);
-          const initialOutcome = existingEvent?.outcome === 'assisted' ? 'assisted' : existingEvent?.outcome === 'independent' ? 'independent' : null;
+          const ledgerEvents = data?.ledger?.events ?? [];
+          const existingEvent = latestEvents(ledgerEvents.filter(e => e.provenance === 'self-report')).get(problemKeyStr);
+          const reviewStatus = evaluateReviewState(problemKeyStr, ledgerEvents, Date.now());
+          const isSameDaySelfReport = existingEvent
+            ? new Date(existingEvent.timestamp).toDateString() === new Date().toDateString()
+            : false;
+          const isReview = reviewStatus.awaitingReview && !isSameDaySelfReport;
+          const initialOutcome = isReview
+            ? null
+            : existingEvent?.outcome === 'assisted'
+              ? 'assisted'
+              : existingEvent?.outcome === 'independent'
+                ? 'independent'
+                : existingEvent?.outcome === 'already-solved'
+                  ? 'already-solved'
+                  : null;
 
           if (!problemBar || !problemBar.host.isConnected || observedProblemKey !== problemKeyStr) {
             problemBar?.root.unmount();
@@ -143,6 +158,7 @@ export function startCFChart() {
                     contestId={problemInfo.contestId}
                     index={problemInfo.index}
                     initialOutcome={initialOutcome}
+                    isReview={isReview}
                   />
                 )}
               </div>

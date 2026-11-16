@@ -68,6 +68,26 @@ describe('production selector safety and scheduling', () => {
     expect(selectScheduledReviews(mixed, review).map(p => p.contestId)).toEqual([1]);
     expect(selectRecommendationsV2(mixed, review, 3, 120).some(p => p.contestId === 1 && p.slot === 'revisit')).toBe(true);
   });
+  it('caps scheduled reviews to at most 1 per day and stops once a review is acted on today', () => {
+    const fiveProblems = catalog(1400, 1400, 1400, 1400, 1400);
+    const fiveDueEvents = [1, 2, 3, 4, 5].map(id => event(id, 'assisted', 4));
+    const reviewState = buildPracticeState([], [], 1400, true, fiveDueEvents, now);
+    const scheduled = selectScheduledReviews(fiveProblems, reviewState);
+    expect(scheduled).toHaveLength(1);
+    expect(scheduled[0].slot).toBe('revisit');
+
+    const sessionRecs = selectRecommendationsV2(fiveProblems, reviewState, 3, 120);
+    expect(sessionRecs.filter(p => p.slot === 'revisit')).toHaveLength(1);
+
+    // Once the user completes or snoozes 1 review today, no more reviews are pushed today
+    const completedToday: PracticeEvent = {
+      ...event(1, 'independent', 0),
+      id: 'completed-today-1',
+      timestamp: now - 1000,
+    };
+    const afterOneReview = buildPracticeState([], [], 1400, true, [...fiveDueEvents, completedToday], now);
+    expect(selectScheduledReviews(fiveProblems, afterOneReview)).toEqual([]);
+  });
 });
 
 describe('evidence and adaptation', () => {

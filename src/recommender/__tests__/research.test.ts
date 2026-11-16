@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { appendSession, replaySession, sessionElapsed } from '../session';
 import { competingRisks } from '../time';
-import { recallProbability, reviewDelay, estimateMemoryState } from '../retention';
+import { recallProbability, reviewDelay, estimateMemoryState, evaluateReviewState } from '../retention';
 import { posteriorSolve, topicFeatures, updateBelief, expectedInformationGain, ucbScore } from '../bayesian';
 import { explorationDistribution, samplePolicy, selectNearTieExplorationSlot } from '../policy';
 describe('session replay', () => {
@@ -40,6 +40,23 @@ describe('research model mechanics', () => {
     expect(overdueRepeatedLapse.lapses).toBe(2);
     expect(overdueRepeatedLapse.stabilityDays).toBeLessThan(recentAssisted.stabilityDays);
     expect(overdueRepeatedLapse.urgency).toBeGreaterThan(recentAssisted.urgency);
+
+    // Same-session API acceptance echo does not graduate an assisted solve,
+    // whereas a later-day API acceptance or independent self-report graduates it permanently.
+    const sameSessionEcho = evaluateReviewState('1-A', [
+      { id: 'assist', version: 1, problemKey: '1-A', outcome: 'assisted', timestamp: now - 4 * day, problem: baseProb, provenance: 'self-report' },
+      { id: 'cf-echo', version: 1, problemKey: '1-A', outcome: 'accepted', timestamp: now - 4 * day + 60_000, problem: baseProb, provenance: 'codeforces-api' },
+    ], now);
+    expect(sameSessionEcho.awaitingReview).toBe(true);
+    expect(sameSessionEcho.isDue).toBe(true);
+
+    const graduatedByLaterAc = evaluateReviewState('1-A', [
+      { id: 'assist', version: 1, problemKey: '1-A', outcome: 'assisted', timestamp: now - 8 * day, problem: baseProb, provenance: 'self-report' },
+      { id: 'later-ac', version: 1, problemKey: '1-A', outcome: 'accepted', timestamp: now - 4 * day, problem: baseProb, provenance: 'codeforces-api' },
+    ], now);
+    expect(graduatedByLaterAc.awaitingReview).toBe(false);
+    expect(graduatedByLaterAc.isDue).toBe(false);
+    expect(graduatedByLaterAc.graduated).toBe(true);
   });
   it('updates posterior means, reduces uncertainty, and computes expected information gain and UCB', () => {
     const prior = {mean:[0],covariance:[[1]]};

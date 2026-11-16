@@ -1,6 +1,7 @@
 import type { EnrichedProblem, PracticeEvent, UserPracticeState } from './types';
 import { problemKey } from './state';
 import { latestEvents } from './events';
+import { evaluateReviewState } from './retention';
 
 const DAY = 86400000;
 export const MODERN_CONTEST_WINDOW_MS = 3 * 365.25 * DAY;
@@ -64,16 +65,8 @@ export function isScheduledReview(
 ): boolean {
   const key = problemKey(p);
   const latest = precomputedLatest ?? latestEvents(state.events.filter(e => e.timestamp <= state.now));
-  const event = latest.get(key);
-  if (!event || ['independent', 'already-solved'].includes(event.outcome)) return false;
-  const lastAssisted = state.events
-    .filter(e => e.problemKey === key && e.outcome === 'assisted' && e.timestamp <= state.now)
-    .at(-1);
-
-  return (
-    !!lastAssisted &&
-    state.now - event.timestamp >= (event.outcome === 'skipped' ? 7 : 3) * DAY
-  );
+  if (!latest.has(key)) return false;
+  return evaluateReviewState(key, state.events, state.now).isDue;
 }
 
 /** Determine if a problem qualifies as a recent contest upsolve. */

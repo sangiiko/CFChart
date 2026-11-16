@@ -4,8 +4,17 @@ import type { EnrichedProblem, UserPracticeState } from './types';
 import { estimateSkill } from './skill';
 import { problemKey } from './state';
 import { buildCandidates } from './candidates';
+import { countResolvedReviewsOnDay, MAX_DAILY_REVIEWS } from './retention';
 
 export const POLICY_VERSION = 'adaptive-baseline-v2' as const;
+
+export interface ScheduledReviewOptions {
+  maxReviews?: number;
+  pinnedKeys?: ReadonlySet<string>;
+  day?: string;
+  formatDay?: (timestampMs: number) => string;
+  removedSolves?: readonly { day: string; problemKey: string }[];
+}
 
 export function selectRecommendationsV2(
   problems: EnrichedProblem[],
@@ -32,15 +41,23 @@ export function selectRecommendationsV2(
   const selected: RecommendedProblem[] = [];
   const used = new Set<string>();
   let remaining = Math.min(240, budget);
+  let revisitCount = 0;
   const add = (item: RecommendedProblem) => {
     selected.push(item);
     used.add(problemKey(item));
     remaining -= item.plannedMinutes;
+    if (item.slot === 'revisit') revisitCount++;
   };
 
   for (const previous of pinned) {
     const candidate = candidates.find(c => problemKey(c.item) === problemKey(previous));
-    if (candidate && !used.has(problemKey(previous)) && selected.length < limit && previous.plannedMinutes <= remaining) {
+    if (
+      candidate &&
+      !used.has(problemKey(previous)) &&
+      selected.length < limit &&
+      previous.plannedMinutes <= remaining &&
+      (previous.slot !== 'revisit' || revisitCount < MAX_DAILY_REVIEWS)
+    ) {
       add({
         ...candidate.item,
         ...previous,
@@ -55,7 +72,12 @@ export function selectRecommendationsV2(
 
   while (selected.length < limit) {
     const ranked = candidates
-      .filter(c => !used.has(problemKey(c.item)) && c.item.plannedMinutes <= remaining)
+      .filter(
+        c =>
+          !used.has(problemKey(c.item)) &&
+          c.item.plannedMinutes <= remaining &&
+          (c.item.slot !== 'revisit' || revisitCount < MAX_DAILY_REVIEWS)
+      )
       .map(c => ({
         ...c,
         marginal:
@@ -82,17 +104,44 @@ export function selectRecommendationsV2(
   return improveSession(selected, candidates, Math.min(240, budget), new Set(pinned.map(problemKey)));
 }
 
-/** Return due scheduled reviews independently of daily goal and time budget. */
+/**
+ * Return due scheduled reviews independently of daily goal and time budget,
+ * strictly paced to at most `maxReviews` (default 1) per local day.
+ * Once a due review has been completed, snoozed, or dismissed today, no further
+ * reviews are pushed until the next day.
+ */
 export function selectScheduledReviews(
   problems: EnrichedProblem[],
-  state: UserPracticeState
+  state: UserPracticeState,
+  optionsOrMax: number | ScheduledReviewOptions = MAX_DAILY_REVIEWS
 ): RecommendedProblem[] {
   if (!state.historyComplete) return [];
+  const opts: ScheduledReviewOptions =
+    typeof optionsOrMax === 'number' ? { maxReviews: optionsOrMax } : optionsOrMax;
+  const maxReviews = opts.maxReviews === undefined
+    ? MAX_DAILY_REVIEWS
+    : Math.max(0, Math.floor(opts.maxReviews));
+  if (maxReviews <= 0) return [];
+
+  const formatDay = opts.formatDay ?? ((ms: number) => new Date(ms).toISOString().slice(0, 10));
+  const day = opts.day ?? formatDay(state.now);
+  const resolvedToday = countResolvedReviewsOnDay(state.events, day, formatDay, opts.removedSolves, state.now);
+  const remainingQuota = Math.max(0, maxReviews - resolvedToday);
+  if (remainingQuota <= 0) return [];
+
   const reviewState: UserPracticeState = state.mode && state.mode !== 'adaptive' ? { ...state, mode: 'adaptive' } : state;
   const skill = estimateSkill(reviewState);
+  const pinnedKeys = opts.pinnedKeys;
+
   return buildCandidates(problems, reviewState, skill, 60)
     .filter(c => c.item.slot === 'revisit')
-    .sort((a, b) => b.score - a.score || problemKey(a.item).localeCompare(problemKey(b.item)))
+    .sort((a, b) => {
+      const aPinned = pinnedKeys?.has(problemKey(a.item)) ? 1 : 0;
+      const bPinned = pinnedKeys?.has(problemKey(b.item)) ? 1 : 0;
+      if (aPinned !== bPinned) return bPinned - aPinned;
+      return b.score - a.score || problemKey(a.item).localeCompare(problemKey(b.item));
+    })
+    .slice(0, remainingQuota)
     .map(c => c.item);
 }
 
