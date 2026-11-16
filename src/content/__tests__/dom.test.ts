@@ -17,12 +17,18 @@ describe('Codeforces page adapters', () => {
   it('detects the header account only when the logout link verifies a session', () => {
     document.body.innerHTML = '<div id="header"><div class="lang-chooser"><a href="/profile/my.handle">My handle</a><a href="/logout?session=1">Logout</a></div></div><a href="/profile/tourist">tourist</a>';
     expect(viewerHandle(document)).toBe('my.handle');
+    document.body.innerHTML = '<div id="header"><div class="lang-chooser"><a href="/profile/my.handle">My handle</a><a href="/4a7f9c12e8b30123456789abcdef0123/logout">Logout</a></div></div>';
+    expect(viewerHandle(document)).toBe('my.handle');
   });
-  it('only finds accepted verdicts inside the Codeforces page content', () => {
+  it('only finds accepted verdicts inside the Codeforces page content or sidebar submissions for the current problem', () => {
     document.body.innerHTML = '<div class="verdict-accepted">Accepted</div><div id="pageContent"></div>';
     expect(hasAcceptedVerdictInPage(document)).toBe(false);
     document.querySelector('#pageContent')!.innerHTML = '<table><tbody><tr><td class="status-verdict-cell">Accepted</td></tr></tbody></table>';
     expect(hasAcceptedVerdictInPage(document)).toBe(true);
+
+    document.body.innerHTML = '<div id="pageContent"></div><div id="sidebar"><div class="sidebox"><table class="rtable"><tbody><tr><td><a href="/contest/2000/problem/B">B</a></td><td><span class="verdict-accepted">Accepted</span></td></tr></tbody></table></div></div>';
+    expect(hasAcceptedVerdictInPage(document, { contestId: 2000, index: 'C' })).toBe(false);
+    expect(hasAcceptedVerdictInPage(document, { contestId: 2000, index: 'B' })).toBe(true);
   });
   it('does not use an unrelated roundbox as a graph anchor', () => {
     document.body.innerHTML = '<div id="pageContent"><div class="roundbox">Profile info</div></div>';

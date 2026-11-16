@@ -254,4 +254,23 @@ describe('in-page content integration', () => {
     expect(client.getPractice).toHaveBeenCalledTimes(initialPracticeCalls);
     expect(client.exportPracticeData).toHaveBeenCalledTimes(1);
   });
+  it('renders Solved and Solved with help when live Codeforces uses tokenized logout and sidebar Last submissions', async () => {
+    history.replaceState({}, '', '/problemset/problem/1000/A');
+    document.body.innerHTML = `
+      <div id="header"><div class="lang-chooser"><a href="/profile/myHandle">myHandle</a><a href="/9f8e7d6c5b4a3210fedcba9876543210/logout">Logout</a></div></div>
+      <div id="pageContent">
+        <div class="problem-statement"><div class="header"><div class="title">A. Test Problem</div></div></div>
+      </div>
+      <div id="sidebar">
+        <div class="roundbox sidebox">
+          <div class="caption titled">→ Last submissions</div>
+          <table class="rtable"><tbody><tr><td><a href="/problemset/submission/1000/12345">12345</a></td><td><span class="verdict-accepted">Accepted</span></td></tr></tbody></table>
+        </div>
+      </div>
+    `;
+    await start();
+    const shadowEl = shadow('cfchart-problem-host');
+    expect(shadowEl.textContent).toContain('Solved');
+    expect(shadowEl.textContent).toContain('Solved with help');
+  });
 });

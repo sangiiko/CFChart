@@ -35,6 +35,7 @@ export function startCFChart() {
   let native: ReturnType<typeof preserveNativeGraph> | null = null;
   let observedHandle: string | null = null, observedProblemKey: string | null = null, pending = 0, problemRequestId = 0;
   let checkedProblemSignature: string | null = null, problemCheckDirty = false;
+  let syncedAcceptedKey: string | null = null;
   let viewerChecked = false;
   const showNative = (visible: boolean) => {
     if (!native) {
@@ -105,7 +106,7 @@ export function startCFChart() {
         // A verdict shown in the page belongs to the signed-in account. History is
         // checked separately for the tracked account when those handles differ.
         const isPageAccepted = viewerHandle(document)?.toLowerCase() === userHandle.toLowerCase()
-          && hasAcceptedVerdictInPage(document);
+          && hasAcceptedVerdictInPage(document, problemInfo);
         const signature = `${problemKeyStr}:${userHandle}:${isPageAccepted}`;
         const mountProblemBar = () => {
           if (!problemBar || !problemBar.host.isConnected || observedProblemKey !== problemKeyStr) {
@@ -125,6 +126,7 @@ export function startCFChart() {
         };
         const freshlyMounted = mountProblemBar();
         if (freshlyMounted) {
+          problemCheckDirty = true;
           problemBar!.root.render(
             <RenderBoundary>
               <div className="cf-problem-area">
@@ -151,9 +153,16 @@ export function startCFChart() {
           const currentProblem = parseProblemPath(location.pathname);
           if (currentProblem?.contestId !== problemInfo.contestId || currentProblem.index !== problemInfo.index) return;
           const isHistoryAccepted = practice?.submissions.some(
-            s => s.verdict === 'OK' && s.problem?.contestId === problemInfo.contestId && s.problem?.index?.toUpperCase() === problemInfo.index
+            s => s.verdict === 'OK' && (s.problem?.contestId === problemInfo.contestId || s.contestId === problemInfo.contestId) && s.problem?.index?.toUpperCase() === problemInfo.index
           );
           const isAccepted = isPageAccepted || Boolean(isHistoryAccepted);
+          if (isPageAccepted && !isHistoryAccepted && userHandle) {
+            const syncKey = `${problemKeyStr}:${userHandle}`;
+            if (syncedAcceptedKey !== syncKey) {
+              syncedAcceptedKey = syncKey;
+              void getPractice(userHandle, { force: true }).catch(() => {});
+            }
+          }
           const ledgerEvents = data?.ledger?.events ?? [];
           const existingEvent = latestEvents(ledgerEvents.filter(e => e.provenance === 'self-report')).get(problemKeyStr);
           const reviewStatus = evaluateReviewState(problemKeyStr, ledgerEvents, Date.now());
@@ -199,20 +208,26 @@ export function startCFChart() {
   observer.observe(document.documentElement, { childList: true, subtree: true });
   // CF uses full page navigation. A bounded observer handles delayed graph/header construction.
   const stopObserving = window.setTimeout(() => observer.disconnect(), 30_000);
-  // Codeforces can add a submission verdict well after the initial page settles.
-  // Keep watching just the problem content and rerender only when acceptance changes.
-  const problemContent = parseProblemPath(location.pathname) && document.querySelector('#pageContent');
-  let pageAcceptedKnown = hasAcceptedVerdictInPage(document);
+  // Codeforces can add a submission verdict well after the initial page settles
+  // (including in the sidebar "Last submissions" table).
+  // Keep watching problem content and sidebar and rerender only when acceptance changes.
+  const initialProblem = parseProblemPath(location.pathname);
+  const problemContent = initialProblem && document.querySelector('#pageContent');
+  const problemSidebar = initialProblem && document.querySelector('#sidebar');
+  let pageAcceptedKnown = hasAcceptedVerdictInPage(document, initialProblem ?? undefined);
   const verdictObserver = new MutationObserver(() => {
-    const accepted = hasAcceptedVerdictInPage(document);
+    const currentProblem = parseProblemPath(location.pathname);
+    const accepted = hasAcceptedVerdictInPage(document, currentProblem ?? undefined);
     if (accepted !== pageAcceptedKnown) {
       pageAcceptedKnown = accepted;
       schedule();
     }
   });
-  if (problemContent) verdictObserver.observe(problemContent, {
+  const observerOpts = {
     childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class'],
-  });
+  };
+  if (problemContent) verdictObserver.observe(problemContent, observerOpts);
+  if (problemSidebar) verdictObserver.observe(problemSidebar, observerOpts);
   window.addEventListener('popstate', schedule);
   const unsubscribe = subscribeToChanges(changedKeys => {
     const handleKey = preferences?.personalHandle?.toLowerCase();

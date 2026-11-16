@@ -7,12 +7,25 @@ export function viewerHandle(document: Document): string | null {
   const header = document.querySelector('#header .lang-chooser');
   if (!header) return null;
   const links = Array.from(header.querySelectorAll<HTMLAnchorElement>('a[href]'));
-  const hasLogout = links.some(link => { try { return new URL(link.href, document.baseURI).pathname === '/logout'; } catch { return false; } });
+  let origin: string;
+  try {
+    origin = new URL(document.baseURI).origin;
+  } catch {
+    return null;
+  }
+  const hasLogout = links.some(link => {
+    try {
+      const url = new URL(link.href, document.baseURI);
+      return url.origin === origin && /^\/(?:[a-z0-9]{16,}\/)?logout$/i.test(url.pathname);
+    } catch {
+      return false;
+    }
+  });
   if (!hasLogout) return null;
   for (const link of links) {
     try {
       const url = new URL(link.href, document.baseURI);
-      if (url.origin !== new URL(document.baseURI).origin) continue;
+      if (url.origin !== origin) continue;
       const handle = profileHandle(url.pathname);
       if (handle) return handle;
     } catch { /* A malformed host link is not an account identity. */ }
@@ -76,13 +89,43 @@ export function problemHeaderAnchor(document: Document): HTMLElement | null {
     || document.querySelector<HTMLElement>('.problem-statement .header');
 }
 
-export function hasAcceptedVerdictInPage(document: Document): boolean {
+function rowMatchesProblem(row: Element, problemInfo?: { contestId: number; index: string }): boolean {
+  if (!problemInfo) return true;
+  const links = Array.from(row.querySelectorAll<HTMLAnchorElement>('a[href]'));
+  const problemLinks = links
+    .map(link => {
+      try {
+        return parseProblemPath(new URL(link.href, row.ownerDocument.baseURI).pathname);
+      } catch {
+        return null;
+      }
+    })
+    .filter((parsed): parsed is { contestId: number; index: string } => parsed !== null);
+  if (problemLinks.length === 0) return true;
+  return problemLinks.some(p => p.contestId === problemInfo.contestId && p.index === problemInfo.index);
+}
+
+export function hasAcceptedVerdictInPage(
+  document: Document,
+  problemInfo?: { contestId: number; index: string }
+): boolean {
   const content = document.querySelector('#pageContent');
   if (content) {
     if (content.querySelector('.verdict-accepted')) return true;
     const verdictElements = content.querySelectorAll('span.verdict-accepted, td.status-verdict-cell, td.status-cell');
     for (const el of verdictElements) {
       if (el.textContent?.includes('Accepted')) return true;
+    }
+  }
+  const sidebar = document.querySelector('#sidebar');
+  if (sidebar) {
+    const tables = sidebar.querySelectorAll('.sidebox table.rtable');
+    for (const table of tables) {
+      const acceptedNodes = table.querySelectorAll('.verdict-accepted, [submissionverdict="OK"]');
+      for (const node of acceptedNodes) {
+        const row = node.closest('tr');
+        if (!row || rowMatchesProblem(row, problemInfo)) return true;
+      }
     }
   }
   return false;
