@@ -237,4 +237,21 @@ describe('in-page content integration', () => {
     const assistedBtn = Array.from(verdictBar.querySelectorAll('button')).find(b => b.textContent === 'Solved with help')!;
     expect(assistedBtn.disabled).toBe(false);
   });
+  it('mounts timer immediately and avoids re-fetching practice data on repeated DOM mutations for the same problem', async () => {
+    history.replaceState({}, '', '/problemset/problem/2000/C');
+    document.body.innerHTML = '<div id="header"><div class="lang-chooser"><a href="/profile/myHandle">myHandle</a><a href="/logout">Logout</a></div></div><div id="pageContent"><div class="problem-statement"><div class="header"><div class="title">C. Test Problem</div></div></div></div>';
+    client.getPractice.mockClear();
+    client.exportPracticeData.mockClear();
+    await start();
+    const initialPracticeCalls = client.getPractice.mock.calls.length;
+    expect(initialPracticeCalls).toBe(2); // 1 from TopBarHabitPill + 1 from problem check
+    expect(client.exportPracticeData).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      document.querySelector('#pageContent')!.insertAdjacentHTML('beforeend', '<div class="mathjax-update">x^2</div>');
+      await new Promise(resolve => setTimeout(resolve, 120));
+    });
+    expect(client.getPractice).toHaveBeenCalledTimes(initialPracticeCalls);
+    expect(client.exportPracticeData).toHaveBeenCalledTimes(1);
+  });
 });

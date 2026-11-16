@@ -130,10 +130,19 @@ export function selectScheduledReviews(
   if (remainingQuota <= 0) return [];
 
   const reviewState: UserPracticeState = state.mode && state.mode !== 'adaptive' ? { ...state, mode: 'adaptive' } : state;
+  const candidateKeys = new Set(
+    reviewState.events
+      .filter(e => e.outcome === 'assisted' && e.timestamp <= reviewState.now)
+      .map(e => e.problemKey)
+  );
+  if (!candidateKeys.size) return [];
+  const candidateProblems = problems.filter(p => candidateKeys.has(problemKey(p)));
+  if (!candidateProblems.length) return [];
+
   const skill = estimateSkill(reviewState);
   const pinnedKeys = opts.pinnedKeys;
 
-  return buildCandidates(problems, reviewState, skill, 60)
+  return buildCandidates(candidateProblems, reviewState, skill, 60)
     .filter(c => c.item.slot === 'revisit')
     .sort((a, b) => {
       const aPinned = pinnedKeys?.has(problemKey(a.item)) ? 1 : 0;

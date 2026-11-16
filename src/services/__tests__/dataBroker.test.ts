@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createDataBroker, FULL_RECHECK_INTERVAL, HISTORY_PAGE_SIZE, selectRecommendations } from '../dataBroker';
+import { createDataBroker, FULL_RECHECK_INTERVAL, HISTORY_PAGE_SIZE, INCREMENTAL_PAGE_SIZE, selectRecommendations } from '../dataBroker';
 import type { CFProblem, CFSubmission } from '../../types/codeforces';
 import type { CachedPractice, Preferences } from '../../types/app';
 
@@ -625,4 +625,42 @@ it('removes a solve locally across refreshes without hiding a later day or anoth
   advance(86400000);
   api.fetchSubmissionPage.mockResolvedValue([submission(3000)]);
   expect((await broker.getPractice('alice', { force: true })).progress.todayCount).toBe(1);
+});
+
+describe('sync performance and wrong-answer handling', () => {
+  it('uses incremental delta pages on refresh, resolves TESTING->WRONG_ANSWER quickly, and coalesces concurrent calls', async () => {
+    const { broker, api, submission, advance } = fixture();
+    const initialHistory = Array.from({ length: 120 }, (_, i) => submission(3000 - i));
+    api.fetchSubmissionPage.mockResolvedValueOnce(initialHistory);
+    await broker.getPractice('alice');
+    expect(api.fetchSubmissionPage).toHaveBeenLastCalledWith('alice', 1, HISTORY_PAGE_SIZE);
+
+    // 10 minutes later (past PROFILE_TTL=5m and PRACTICE_TTL=60s): a TESTING submission arrives
+    advance(10 * 60 * 1000);
+    const testingSub: CFSubmission = {
+      ...submission(3001),
+      verdict: 'TESTING',
+    };
+    api.fetchSubmissionPage.mockResolvedValueOnce([testingSub, ...initialHistory.slice(0, 49)]);
+    const pendingSnap = await broker.getPractice('alice');
+    expect(api.fetchSubmissionPage).toHaveBeenLastCalledWith('alice', 1, INCREMENTAL_PAGE_SIZE);
+    // Does not block practice sync on re-fetching user.info/user.rating within 1h
+    expect(api.fetchUserInfo).toHaveBeenCalledTimes(1);
+    expect(pendingSnap.submissions[0].verdict).toBe('TESTING');
+
+    // Within 6 seconds (TESTING_TTL=5s), concurrent refreshes settle TESTING -> WRONG_ANSWER in a single delta call
+    advance(6000);
+    const waSub: CFSubmission = {
+      ...testingSub,
+      verdict: 'WRONG_ANSWER',
+    };
+    api.fetchSubmissionPage.mockResolvedValueOnce([waSub, ...initialHistory.slice(0, 49)]);
+    const [s1, s2] = await Promise.all([
+      broker.getPractice('alice'),
+      broker.getPractice('alice'),
+    ]);
+    expect(s1).toEqual(s2);
+    expect(s1.submissions[0].verdict).toBe('WRONG_ANSWER');
+    expect(api.fetchSubmissionPage).toHaveBeenCalledTimes(3);
+  });
 });

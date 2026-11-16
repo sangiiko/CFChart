@@ -19,12 +19,15 @@ import { predictHistoricalAcceptanceModel, type AcceptanceModel } from '../recom
 import modelJson from '../recommender/acceptance-model.json';
 import { appendEvent, emptyLedger, latestEvents, validateFeedback } from '../recommender/events';
 import { summarizeRecommendationFeedback } from '../recommender/evaluation';
-import type { PracticeFeedback, PracticeLedger, PracticePlan } from '../recommender/types';
+import type { PracticeFeedback, PracticeLedger, PracticePlan, EnrichedProblem } from '../recommender/types';
 import { format } from 'date-fns';
 
 export const HISTORY_PAGE_SIZE = 1000;
+export const INCREMENTAL_PAGE_SIZE = 50;
 const PROFILE_TTL = 5 * 60 * 1000;
+const PRACTICE_PROFILE_TTL = 60 * 60 * 1000;
 const PRACTICE_TTL = 60 * 1000;
+const TESTING_TTL = 5 * 1000;
 const CATALOG_TTL = 24 * 60 * 60 * 1000;
 export const FULL_RECHECK_INTERVAL = 7 * 24 * 60 * 60 * 1000;
 const PREF_KEY = 'preferences';
@@ -102,7 +105,15 @@ export function createDataBroker(options: BrokerOptions = {}) {
   const now = options.now ?? Date.now;
   const locks = new Map<string, Promise<unknown>>();
   const profilesInFlight = new Map<string, Promise<ProfileSnapshot>>();
+  const practiceInFlight = new Map<string, { at: number; promise: Promise<PracticeSnapshot> }>();
   let catalogInFlight: Promise<CachedCatalog> | undefined;
+  let enrichedCache: {
+    updatedAt: number;
+    problemsCount: number;
+    contestsCount: number;
+    enriched: EnrichedProblem[];
+    enrichedMap: Map<string, EnrichedProblem>;
+  } | undefined;
 
   function locked<T>(key: string, work: () => Promise<T>): Promise<T> {
     const next = (locks.get(key) ?? Promise.resolve()).catch(() => {}).then(work);
@@ -146,7 +157,7 @@ export function createDataBroker(options: BrokerOptions = {}) {
     });
   }
 
-  async function getProfile(handle: string, request: RequestOptions = {}): Promise<ProfileSnapshot> {
+  async function getProfile(handle: string, request: RequestOptions = {}, ttlMs = PROFILE_TTL): Promise<ProfileSnapshot> {
     handle = normalizeHandle(handle);
     const key = `cfchart:profile:${handle.toLowerCase()}`;
     const pending = profilesInFlight.get(key);
@@ -154,8 +165,8 @@ export function createDataBroker(options: BrokerOptions = {}) {
     const operation = (async (): Promise<ProfileSnapshot> => {
       const cached = await storage.getValue<CachedProfile>(key);
       const timestamp = now();
-      const refreshUser = request.force || !cached?.userUpdatedAt || timestamp - cached.userUpdatedAt >= PROFILE_TTL;
-      const refreshRatings = request.force || !cached?.ratingsUpdatedAt || timestamp - cached.ratingsUpdatedAt >= PROFILE_TTL;
+      const refreshUser = request.force || !cached?.userUpdatedAt || timestamp - cached.userUpdatedAt >= ttlMs;
+      const refreshRatings = request.force || !cached?.ratingsUpdatedAt || timestamp - cached.ratingsUpdatedAt >= ttlMs;
       const [userResult, ratingsResult] = await Promise.allSettled([
         refreshUser ? api.fetchUserInfo(handle) : Promise.resolve(cached!.user),
         refreshRatings ? api.fetchUserRatingHistory(handle) : Promise.resolve(cached!.ratings),
@@ -224,17 +235,37 @@ export function createDataBroker(options: BrokerOptions = {}) {
   async function getPractice(handle: string, request: RequestOptions = {}): Promise<PracticeSnapshot> {
     handle = normalizeHandle(handle);
     const key = `cfchart:practice:${handle.toLowerCase()}`;
-    return locked(key, async () => {
+    const requestTime = now();
+    const modeKey = request.resetHistory ? 'reset' : request.syncMore ? 'syncMore' : request.force ? 'force' : 'read';
+    if (modeKey === 'read' || modeKey === 'force') {
+      const existing = practiceInFlight.get(`${key}:${modeKey}`) ?? (modeKey === 'read' ? practiceInFlight.get(`${key}:force`) : undefined);
+      if (existing && Math.abs(requestTime - existing.at) < 1000) {
+        return existing.promise;
+      }
+    }
+    const flightKey = `${key}:${modeKey}`;
+    const operation = locked(key, async () => {
       let cached = await storage.getValue<CachedPractice>(key);
       const errors: string[] = [];
       const autoRecheck = Boolean(cached?.complete && cached.lastFullSyncAt && now() - cached.lastFullSyncAt >= FULL_RECHECK_INTERVAL);
-      const shouldRefresh = request.force || request.syncMore || request.resetHistory || autoRecheck || !cached || now() - cached.updatedAt >= PRACTICE_TTL;
+      const hasPendingVerdict = Boolean(cached?.submissions.slice(0, 20).some(s => !s.verdict || s.verdict === 'TESTING'));
+      const ttl = hasPendingVerdict ? TESTING_TTL : PRACTICE_TTL;
+      const shouldRefresh = request.force || request.syncMore || request.resetHistory || autoRecheck || !cached || now() - cached.updatedAt >= ttl;
       if (shouldRefresh) {
         try {
-          const latest = await api.fetchSubmissionPage(handle, 1, HISTORY_PAGE_SIZE);
           const previousIds = new Set(cached?.submissions.map(submission => submission.id));
-          const overlap = latest.some(submission => previousIds.has(submission.id));
-          const completePage = latest.length < HISTORY_PAGE_SIZE;
+          const canIncremental = Boolean(
+            cached?.complete && cached.submissions.length > 0 && !request.syncMore && !request.resetHistory && !autoRecheck
+          );
+          let pageSize = canIncremental ? INCREMENTAL_PAGE_SIZE : HISTORY_PAGE_SIZE;
+          let latest = await api.fetchSubmissionPage(handle, 1, pageSize);
+          let overlap = latest.some(submission => previousIds.has(submission.id));
+          if (canIncremental && !overlap && latest.length >= INCREMENTAL_PAGE_SIZE) {
+            pageSize = HISTORY_PAGE_SIZE;
+            latest = await api.fetchSubmissionPage(handle, 1, HISTORY_PAGE_SIZE);
+            overlap = latest.some(submission => previousIds.has(submission.id));
+          }
+          const completePage = latest.length < pageSize;
           const isReset = Boolean(request.resetHistory || autoRecheck);
           const complete = completePage || Boolean(!isReset && overlap && cached?.complete);
           cached = {
@@ -268,7 +299,7 @@ export function createDataBroker(options: BrokerOptions = {}) {
       const ledger = await storage.getValue<PracticeLedger>(ledgerKey(handle)) ?? emptyLedger();
       let recommendations: RecommendedProblem[] = [];
       if (coverage.complete) {
-        const [profile, catalog] = await Promise.allSettled([getProfile(handle), getCatalog()]);
+        const [profile, catalog] = await Promise.allSettled([getProfile(handle, {}, PRACTICE_PROFILE_TTL), getCatalog()]);
         if (profile.status === 'rejected') errors.push(errorMessage(profile.reason));
         if (catalog.status === 'rejected') errors.push(`Recommendations: ${errorMessage(catalog.reason)}`);
         if (profile.status === 'fulfilled' && catalog.status === 'fulfilled') {
@@ -276,8 +307,34 @@ export function createDataBroker(options: BrokerOptions = {}) {
           if (catalog.value.error) errors.push(catalog.value.error);
           const day = format(new Date(now()), 'yyyy-MM-dd');
           const saved = await storage.getValue<PracticePlan>(planKey(handle));
-          const enriched = enrichCatalog(catalog.value.problems, catalog.value.contests ?? []);
-          const enrichedMap = new Map(enriched.map(cp => [problemKey(cp), cp]));
+          const problemsCount = catalog.value.problems.length;
+          const contestsCount = catalog.value.contests?.length ?? 0;
+          if (
+            !enrichedCache ||
+            enrichedCache.updatedAt !== catalog.value.updatedAt ||
+            enrichedCache.problemsCount !== problemsCount ||
+            enrichedCache.contestsCount !== contestsCount
+          ) {
+            const enriched = enrichCatalog(catalog.value.problems, catalog.value.contests ?? []);
+            enrichedCache = {
+              updatedAt: catalog.value.updatedAt,
+              problemsCount,
+              contestsCount,
+              enriched,
+              enrichedMap: new Map(enriched.map(cp => [problemKey(cp), cp])),
+            };
+          }
+          const { enriched, enrichedMap } = enrichedCache;
+
+          // Pre-index earliest attempt time per problem so syncProblemRecord avoids redundant full-history scans
+          const earliestSubSecByKey = new Map<string, number>();
+          for (const s of cached.submissions) {
+            if (!s.problem?.contestId || !s.problem?.index || !Number.isFinite(s.creationTimeSeconds)) continue;
+            const k = problemKey(s.problem);
+            const prev = earliestSubSecByKey.get(k);
+            if (prev === undefined || s.creationTimeSeconds < prev) earliestSubSecByKey.set(k, s.creationTimeSeconds);
+          }
+          const hasRatings = profile.value.ratings.length > 0;
 
           // Sync past ledger records (assignments, events, and saved plan items) to the current model & catalog
           const historyCache = new Map<number, ReturnType<typeof prepareAcceptanceHistory>>();
@@ -290,16 +347,20 @@ export function createDataBroker(options: BrokerOptions = {}) {
             return h;
           };
           const syncProblemRecord = (prob: RecommendedProblem, asOfMs: number): RecommendedProblem => {
-            const cat = enrichedMap.get(problemKey(prob));
+            const key = problemKey(prob);
+            const cat = enrichedMap.get(key);
             const tags = prob.tags?.length ? prob.tags : (cat?.tags ?? []);
             const rating = Number.isFinite(prob.rating) ? prob.rating : (cat?.rating ?? 1400);
             const qualityScore = cat ? cat.qualityScore : (prob.qualityScore ?? 1);
             let shadowAcceptance = prob.shadowAcceptance;
-            if (shadowAcceptance === undefined && Number.isFinite(rating)) {
-              const features = buildAcceptanceFeaturesFromHistory({ ...prob, rating, tags }, getHistoryAt(asOfMs));
-              shadowAcceptance = features
-                ? predictHistoricalAcceptanceModel(modelJson as AcceptanceModel, features)
-                : undefined;
+            if (shadowAcceptance === undefined && Number.isFinite(rating) && hasRatings) {
+              const earliestSec = earliestSubSecByKey.get(key);
+              if (earliestSec === undefined || earliestSec * 1000 > asOfMs) {
+                const features = buildAcceptanceFeaturesFromHistory({ ...prob, rating, tags }, getHistoryAt(asOfMs));
+                shadowAcceptance = features
+                  ? predictHistoricalAcceptanceModel(modelJson as AcceptanceModel, features)
+                  : undefined;
+              }
             }
             if (
               tags === prob.tags &&
@@ -558,6 +619,13 @@ export function createDataBroker(options: BrokerOptions = {}) {
         stale: errors.length > 0 || now() - cached.updatedAt >= PRACTICE_TTL,
       };
     });
+    if (modeKey === 'read' || modeKey === 'force') {
+      practiceInFlight.set(flightKey, { at: requestTime, promise: operation });
+      void operation.finally(() => {
+        if (practiceInFlight.get(flightKey)?.promise === operation) practiceInFlight.delete(flightKey);
+      }).catch(() => {});
+    }
+    return operation;
   }
 
   const ledgerKey = (handle: string) => `cfchart:learning:${handle.toLowerCase()}`;

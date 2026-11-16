@@ -18,6 +18,8 @@ export const TopBarHabitPill: React.FC<Props> = ({ preferences, onPreferencesCha
   const wrapper = useRef<HTMLDivElement>(null);
   const pillRef = useRef<HTMLButtonElement>(null);
   const lastFetch = useRef(0);
+  const activeFetchRef = useRef(false);
+  const lastCompletedAt = useRef(0);
   const handle = preferences.personalHandle;
   useEffect(() => {
     if (!open) return;
@@ -29,15 +31,36 @@ export const TopBarHabitPill: React.FC<Props> = ({ preferences, onPreferencesCha
   useEffect(() => {
     if (!handle) { setPractice(null); return; }
     let active = true;
+    activeFetchRef.current = true;
     setLoading(true); setError(''); lastFetch.current = Date.now();
     const options = requestedOptions.current; requestedOptions.current = { force: false, syncMore: false };
-    getPractice(handle, options).then(value => { if (active) setPractice(value); }).catch(reason => { if (active) setError(reason instanceof Error ? reason.message : 'Practice data could not be loaded.'); }).finally(() => { if (active) setLoading(false); });
+    getPractice(handle, options)
+      .then(value => { if (active) { setPractice(value); lastCompletedAt.current = Date.now(); } })
+      .catch(reason => { if (active) setError(reason instanceof Error ? reason.message : 'Practice data could not be loaded.'); })
+      .finally(() => { activeFetchRef.current = false; if (active) setLoading(false); });
     return () => { active = false; };
   }, [handle, preferences.dailyTarget, preferences.practiceMinutes, preferences.practiceMode, revision]);
   useEffect(() => {
     if (!handle) return;
     let active = true;
-    const unsubscribe = subscribeToChanges(() => {
+    const lowerHandle = handle.toLowerCase();
+    const unsubscribe = subscribeToChanges(changedKeys => {
+      if (changedKeys) {
+        const relevant = changedKeys.some(
+          k =>
+            k === 'preferences' ||
+            k === `cfchart:learning:${lowerHandle}` ||
+            k === `cfchart:practice:${lowerHandle}` ||
+            k === `cfchart:plan:${lowerHandle}`
+        );
+        if (!relevant) return;
+        const onlySelfPracticeOrPlan = changedKeys.every(
+          k => k === `cfchart:practice:${lowerHandle}` || k === `cfchart:plan:${lowerHandle}`
+        );
+        if (onlySelfPracticeOrPlan && (activeFetchRef.current || Date.now() - lastCompletedAt.current < 500)) return;
+      } else if (activeFetchRef.current) {
+        return;
+      }
       getPractice(handle).then(value => { if (active) setPractice(value); }).catch(() => {});
     });
     const onReturn = () => {

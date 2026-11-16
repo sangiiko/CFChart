@@ -30,11 +30,13 @@ export const detectViewer = (handle: string) => request<Preferences>({ type: 'CF
 export const getProfile = (handle: string, options?: RequestOptions) => request<ProfileSnapshot>({ type: 'CFCHART_REQUEST', action: 'getProfile', handle, options });
 export const getPractice = (handle: string, options?: RequestOptions) => request<PracticeSnapshot>({ type: 'CFCHART_REQUEST', action: 'getPractice', handle, options });
 
-export function subscribeToChanges(callback: () => void): () => void {
+export function subscribeToChanges(callback: (changedKeys?: string[]) => void): () => void {
   const api = getExtensionApi();
   if (!api?.storage?.onChanged) return () => {};
   const listener = (changes: Record<string, unknown>, areaName: string) => {
-    if (areaName === 'local' && Object.keys(changes).some(key => key === 'preferences' || key.startsWith('cfchart:'))) callback();
+    if (areaName !== 'local') return;
+    const changedKeys = Object.keys(changes).filter(key => key === 'preferences' || key.startsWith('cfchart:'));
+    if (changedKeys.length) callback(changedKeys);
   };
   api.storage.onChanged.addListener(listener);
   return () => api.storage.onChanged.removeListener(listener);

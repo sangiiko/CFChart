@@ -34,6 +34,7 @@ export function startCFChart() {
   let disposed = false, preferences: Preferences | null = null, header: Mount | null = null, profile: Mount | null = null, problemBar: Mount | null = null;
   let native: ReturnType<typeof preserveNativeGraph> | null = null;
   let observedHandle: string | null = null, observedProblemKey: string | null = null, pending = 0, problemRequestId = 0;
+  let checkedProblemSignature: string | null = null, problemCheckDirty = false;
   let viewerChecked = false;
   const showNative = (visible: boolean) => {
     if (!native) {
@@ -45,6 +46,8 @@ export function startCFChart() {
   const removeProfile = () => { native?.restore(); native = null; profile?.root.unmount(); profile?.host.remove(); profile = null; observedHandle = null; };
   const removeProblemBar = () => {
     problemRequestId++;
+    checkedProblemSignature = null;
+    problemCheckDirty = false;
     problemBar?.root.unmount();
     problemBar?.host.remove();
     problemBar = null;
@@ -103,6 +106,38 @@ export function startCFChart() {
         // checked separately for the tracked account when those handles differ.
         const isPageAccepted = viewerHandle(document)?.toLowerCase() === userHandle.toLowerCase()
           && hasAcceptedVerdictInPage(document);
+        const signature = `${problemKeyStr}:${userHandle}:${isPageAccepted}`;
+        const mountProblemBar = () => {
+          if (!problemBar || !problemBar.host.isConnected || observedProblemKey !== problemKeyStr) {
+            problemBar?.root.unmount();
+            problemBar?.host.remove();
+            problemBar = createMount('cfchart-problem-host');
+            problemBar.host.style.cssText = 'display:block;margin:6px 0;text-align:left;';
+            if (anchor.classList.contains('title')) {
+              anchor.after(problemBar.host);
+            } else {
+              anchor.append(problemBar.host);
+            }
+            observedProblemKey = problemKeyStr;
+            return true;
+          }
+          return false;
+        };
+        const freshlyMounted = mountProblemBar();
+        if (freshlyMounted) {
+          problemBar!.root.render(
+            <RenderBoundary>
+              <div className="cf-problem-area">
+                <ProblemTimerWidget problemKey={problemKeyStr} handle={userHandle || undefined} />
+              </div>
+            </RenderBoundary>
+          );
+        }
+        if (checkedProblemSignature === signature && !problemCheckDirty) {
+          return;
+        }
+        checkedProblemSignature = signature;
+        problemCheckDirty = false;
         const requestId = ++problemRequestId;
         const checkAccepted = userHandle
           ? Promise.all([
@@ -136,22 +171,11 @@ export function startCFChart() {
                   ? 'already-solved'
                   : null;
 
-          if (!problemBar || !problemBar.host.isConnected || observedProblemKey !== problemKeyStr) {
-            problemBar?.root.unmount();
-            problemBar?.host.remove();
-            problemBar = createMount('cfchart-problem-host');
-            problemBar.host.style.cssText = 'display:block;margin:6px 0;text-align:left;';
-            if (anchor.classList.contains('title')) {
-              anchor.after(problemBar.host);
-            } else {
-              anchor.append(problemBar.host);
-            }
-            observedProblemKey = problemKeyStr;
-          }
-          problemBar.root.render(
+          mountProblemBar();
+          problemBar!.root.render(
             <RenderBoundary>
               <div className="cf-problem-area">
-                <ProblemTimerWidget problemKey={problemKeyStr} handle={userHandle ?? undefined} />
+                <ProblemTimerWidget problemKey={problemKeyStr} handle={userHandle || undefined} />
                 {isAccepted && userHandle && (
                   <ProblemVerdictBar
                     handle={userHandle}
@@ -190,8 +214,19 @@ export function startCFChart() {
     childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class'],
   });
   window.addEventListener('popstate', schedule);
-  const unsubscribe = subscribeToChanges(() => {
-    getPreferences().then(value => { if (!disposed && JSON.stringify(value) !== JSON.stringify(preferences)) { preferences = value; render(); } }).catch(() => { /* Visible UI can continue with the last known preferences. */ });
+  const unsubscribe = subscribeToChanges(changedKeys => {
+    const handleKey = preferences?.personalHandle?.toLowerCase();
+    if (handleKey && (!changedKeys || changedKeys.some(k => k === `cfchart:learning:${handleKey}` || k === `cfchart:practice:${handleKey}`))) {
+      problemCheckDirty = true;
+    }
+    getPreferences().then(value => {
+      if (disposed) return;
+      const prefsChanged = JSON.stringify(value) !== JSON.stringify(preferences);
+      if (prefsChanged || problemCheckDirty) {
+        preferences = value;
+        render();
+      }
+    }).catch(() => { /* Visible UI can continue with the last known preferences. */ });
   });
   getPreferences().then(value => { if (!disposed) { preferences = value; render(); } }).catch(error => {
     if (disposed) return;

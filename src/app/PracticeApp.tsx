@@ -14,10 +14,15 @@ export function PracticeApp({ fullPage = false }: { fullPage?: boolean }) {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const request = useRef(0);
+  const inFlight = useRef(false);
+  const lastCompletedAt = useRef(0);
+  const hasSnapshot = useRef(false);
+  hasSnapshot.current = Boolean(practice);
 
-  const load = useCallback(async (options: { force?: boolean; syncMore?: boolean } = {}) => {
+  const load = useCallback(async (options: { force?: boolean; syncMore?: boolean; silent?: boolean } = {}) => {
     const id = ++request.current;
-    setLoading(true);
+    inFlight.current = true;
+    if (!options.silent || !hasSnapshot.current) setLoading(true);
     try {
       const prefs = await getPreferences();
       if (id !== request.current) return;
@@ -25,26 +30,47 @@ export function PracticeApp({ fullPage = false }: { fullPage?: boolean }) {
       if (!prefs.personalHandle) {
         setPractice(null);
       } else {
-        const snapshot = await getPractice(prefs.personalHandle, options);
+        const snapshot = await getPractice(prefs.personalHandle, { force: options.force, syncMore: options.syncMore });
         if (id !== request.current) return;
         setPractice(snapshot);
       }
+      lastCompletedAt.current = Date.now();
       setError('');
     } catch (reason) {
       if (id === request.current) setError(message(reason));
     } finally {
+      inFlight.current = false;
       if (id === request.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     void load();
-    const unsubscribe = subscribeToChanges(() => void load());
-    const onFocus = () => void load();
+    const unsubscribe = subscribeToChanges(changedKeys => {
+      const handleKey = preferences?.personalHandle?.toLowerCase();
+      if (changedKeys && handleKey) {
+        const relevant = changedKeys.some(
+          k =>
+            k === 'preferences' ||
+            k === `cfchart:learning:${handleKey}` ||
+            k === `cfchart:practice:${handleKey}` ||
+            k === `cfchart:plan:${handleKey}`
+        );
+        if (!relevant) return;
+        const onlySelfPracticeOrPlan = changedKeys.every(
+          k => k === `cfchart:practice:${handleKey}` || k === `cfchart:plan:${handleKey}`
+        );
+        if (onlySelfPracticeOrPlan && (inFlight.current || Date.now() - lastCompletedAt.current < 500)) return;
+      } else if (inFlight.current) {
+        return;
+      }
+      void load({ silent: true });
+    });
+    const onFocus = () => void load({ silent: true });
     window.addEventListener('focus', onFocus);
-    const timer = window.setInterval(() => void load(), 60_000);
+    const timer = window.setInterval(() => void load({ silent: true }), 60_000);
     return () => { ++request.current; unsubscribe(); window.removeEventListener('focus', onFocus); clearInterval(timer); };
-  }, [load]);
+  }, [load, preferences?.personalHandle]);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
