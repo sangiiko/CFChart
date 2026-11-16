@@ -64,7 +64,7 @@ export const TopBarHabitPill: React.FC<Props> = ({ preferences, onPreferencesCha
       getPractice(handle).then(value => { if (active) setPractice(value); }).catch(() => {});
     });
     const onReturn = () => {
-      if (document.visibilityState === 'hidden' || Date.now() - lastFetch.current < 15_000) return;
+      if (document.visibilityState === 'hidden' || Date.now() - lastFetch.current < 3_000) return;
       requestedOptions.current = { force: true, syncMore: false }; setRevision(value => value + 1);
     };
     // Only the visible tab refreshes; this also crosses local midnight correctly.

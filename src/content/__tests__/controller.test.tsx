@@ -273,4 +273,22 @@ describe('in-page content integration', () => {
     expect(shadowEl.textContent).toContain('Solved');
     expect(shadowEl.textContent).toContain('Solved with help');
   });
+  it('renders Solved and Solved with help immediately on an accepted page without waiting for getPractice network sync', async () => {
+    history.replaceState({}, '', '/problemset/problem/1000/A');
+    document.body.innerHTML = `
+      <div id="header"><div class="lang-chooser"><a href="/profile/myHandle">myHandle</a><a href="/logout">Logout</a></div></div>
+      <div id="pageContent">
+        <div class="problem-statement"><div class="header"><div class="title">A. Test Problem</div></div></div>
+        <span class="verdict-accepted">Accepted</span>
+      </div>
+    `;
+    let resolvePractice!: (value: PracticeSnapshot) => void;
+    client.getPractice.mockImplementation(() => new Promise<PracticeSnapshot>(resolve => { resolvePractice = resolve; }));
+    await start();
+    const shadowEl = shadow('cfchart-problem-host');
+    expect(shadowEl.textContent).toContain('Solved');
+    expect(shadowEl.textContent).toContain('Solved with help');
+    resolvePractice(practice);
+    await flush();
+  });
 });

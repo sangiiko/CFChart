@@ -663,4 +663,20 @@ describe('sync performance and wrong-answer handling', () => {
     expect(s1.submissions[0].verdict).toBe('WRONG_ANSWER');
     expect(api.fetchSubmissionPage).toHaveBeenCalledTimes(3);
   });
+
+  it('does not block exportPracticeData or practiceSession while getPractice is waiting on the network', async () => {
+    const { broker, api } = fixture();
+    let resolveFetch!: (subs: CFSubmission[]) => void;
+    api.fetchSubmissionPage.mockImplementationOnce(
+      () => new Promise<CFSubmission[]>(resolve => { resolveFetch = resolve; })
+    );
+
+    const pendingPractice = broker.getPractice('alice');
+    let exportedEarly = false;
+    await broker.exportPracticeData('alice').then(() => { exportedEarly = true; });
+    expect(exportedEarly).toBe(true);
+
+    resolveFetch([]);
+    await pendingPractice;
+  });
 });

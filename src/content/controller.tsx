@@ -141,29 +141,32 @@ export function startCFChart() {
         checkedProblemSignature = signature;
         problemCheckDirty = false;
         const requestId = ++problemRequestId;
-        const checkAccepted = userHandle
-          ? Promise.all([
-              getPractice(userHandle).catch(() => null),
-              (exportPracticeData(userHandle) as Promise<{ ledger?: PracticeLedger } | null>).catch(() => null),
-            ])
-          : Promise.resolve([null, null] as const);
+        let resolvedPractice: Awaited<ReturnType<typeof getPractice>> | null = null;
+        let resolvedData: { ledger?: PracticeLedger } | null = null;
+        let practiceSettled = !userHandle;
+        let dataSettled = !userHandle;
 
-        checkAccepted.then(([practice, data]) => {
+        const renderVerdictState = () => {
           if (disposed || requestId !== problemRequestId) return;
           const currentProblem = parseProblemPath(location.pathname);
           if (currentProblem?.contestId !== problemInfo.contestId || currentProblem.index !== problemInfo.index) return;
-          const isHistoryAccepted = practice?.submissions.some(
+          const ledgerEvents = resolvedData?.ledger?.events ?? [];
+          const isHistoryAccepted = resolvedPractice?.submissions.some(
             s => s.verdict === 'OK' && (s.problem?.contestId === problemInfo.contestId || s.contestId === problemInfo.contestId) && s.problem?.index?.toUpperCase() === problemInfo.index
           );
-          const isAccepted = isPageAccepted || Boolean(isHistoryAccepted);
-          if (isPageAccepted && !isHistoryAccepted && userHandle) {
+          const isLedgerAccepted = ledgerEvents.some(
+            e => e.problemKey === problemKeyStr && ['accepted', 'independent', 'assisted', 'already-solved'].includes(e.outcome)
+          );
+          const isAccepted = isPageAccepted || Boolean(isHistoryAccepted) || isLedgerAccepted;
+          if (!isAccepted && !practiceSettled) return;
+
+          if (isPageAccepted && practiceSettled && !isHistoryAccepted && userHandle) {
             const syncKey = `${problemKeyStr}:${userHandle}`;
             if (syncedAcceptedKey !== syncKey) {
               syncedAcceptedKey = syncKey;
               void getPractice(userHandle, { force: true }).catch(() => {});
             }
           }
-          const ledgerEvents = data?.ledger?.events ?? [];
           const existingEvent = latestEvents(ledgerEvents.filter(e => e.provenance === 'self-report')).get(problemKeyStr);
           const reviewStatus = evaluateReviewState(problemKeyStr, ledgerEvents, Date.now());
           const isSameDaySelfReport = existingEvent
@@ -197,7 +200,26 @@ export function startCFChart() {
               </div>
             </RenderBoundary>
           );
-        });
+        };
+
+        if (!userHandle) {
+          renderVerdictState();
+        } else {
+          void (exportPracticeData(userHandle) as Promise<{ ledger?: PracticeLedger } | null>)
+            .catch(() => null)
+            .then(data => {
+              resolvedData = data;
+              dataSettled = true;
+              renderVerdictState();
+            });
+          void getPractice(userHandle)
+            .catch(() => null)
+            .then(practice => {
+              resolvedPractice = practice;
+              practiceSettled = true;
+              if (dataSettled) renderVerdictState();
+            });
+        }
       }
     } else {
       removeProblemBar();
