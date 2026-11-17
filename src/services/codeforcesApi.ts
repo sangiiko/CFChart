@@ -148,6 +148,7 @@ export function createCodeforcesApi(options: ApiOptions = {}) {
         contestId: submission.contestId,
         creationTimeSeconds: submission.creationTimeSeconds,
         verdict: submission.verdict,
+        programmingLanguage: submission.programmingLanguage,
         problem: {
           contestId: submission.problem.contestId,
           index: submission.problem.index,

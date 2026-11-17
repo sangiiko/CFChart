@@ -5,7 +5,8 @@ import { TopBarHabitPill } from './components/TopBarHabitPill';
 import { ProfileHorizonCard } from './components/ProfileHorizonCard';
 import { ProblemVerdictBar } from './components/ProblemVerdictBar';
 import { ProblemTimerWidget } from './components/ProblemTimerWidget';
-import { headerAnchor, profileAnchor, profileHandle, ratingGraph, preserveNativeGraph, viewerHandle, parseProblemPath, problemHeaderAnchor, hasAcceptedVerdictInPage } from './dom';
+import { CodePeekChip } from './components/CodePeekChip';
+import { headerAnchor, profileAnchor, profileHandle, ratingGraph, preserveNativeGraph, viewerHandle, parseProblemPath, problemHeaderAnchor, hasAcceptedVerdictInPage, peekingEnabled } from './dom';
 import type { PracticeLedger } from '../recommender/types';
 import { latestEvents } from '../recommender/events';
 import { evaluateReviewState } from '../recommender/retention';
@@ -159,6 +160,11 @@ export function startCFChart() {
           );
           const isAccepted = isPageAccepted || Boolean(isHistoryAccepted) || isLedgerAccepted;
           if (!isAccepted && !practiceSettled) return;
+          // The newest accepted submission carries the language the viewer actually used.
+          const ownLanguage = resolvedPractice?.submissions.find(
+            s => s.verdict === 'OK' && s.problem?.index?.toUpperCase() === problemInfo.index
+              && (s.problem?.contestId === problemInfo.contestId || s.contestId === problemInfo.contestId)
+          )?.programmingLanguage;
 
           if (isPageAccepted && practiceSettled && !isHistoryAccepted && userHandle) {
             const syncKey = `${problemKeyStr}:${userHandle}`;
@@ -195,6 +201,14 @@ export function startCFChart() {
                     index={problemInfo.index}
                     initialOutcome={initialOutcome}
                     isReview={isReview}
+                  />
+                )}
+                {isAccepted && userHandle && peekingEnabled(document, problemInfo.contestId) && (
+                  <CodePeekChip
+                    contestId={problemInfo.contestId}
+                    index={problemInfo.index}
+                    handle={userHandle}
+                    language={ownLanguage}
                   />
                 )}
               </div>
