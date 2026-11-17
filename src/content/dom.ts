@@ -89,16 +89,6 @@ export function problemHeaderAnchor(document: Document): HTMLElement | null {
     || document.querySelector<HTMLElement>('.problem-statement .header');
 }
 
-/**
- * Peers' source is only published once the contest is over. Gym and acmsguru
- * rounds hide it entirely, so they stay out of the feature.
- */
-export function peekingEnabled(document: Document, contestId: number): boolean {
-  if (!Number.isFinite(contestId) || contestId >= 100000) return false;
-  const phase = document.querySelector('.contest-state-phase')?.textContent?.trim().toLowerCase();
-  return phase === 'finished';
-}
-
 function rowMatchesProblem(row: Element, problemInfo?: { contestId: number; index: string }): boolean {
   if (!problemInfo) return true;
   const links = Array.from(row.querySelectorAll<HTMLAnchorElement>('a[href]'));

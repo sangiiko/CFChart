@@ -67,15 +67,7 @@
 
 ---
 
-### 4. Fastest Solutions from Other People (after AC)
-
-* **Unlocked only when you have an accepted submission** for a finished, non-gym contest problem. A **⚡ Fastest solutions** chip appears next to the timer and outcome bar; nothing is fetched until you press it.
-* **Server-sorted, so no index is needed:** Codeforces' own status page is read with `order=BY_CONSUMED_TIME_ASC`, keeping the first two pages (100 rows) and filtering client-side to your language family (all C++ compilers count as one, all Python runs as one). Your own handle, `vjudge` mirrors, and multi-person team submissions are excluded.
-* **Bounded and cached:** at most two status pages plus three source pages per open, one request per second, no retries, a 60-second pause after a `403`. Solutions are cached per problem in `storage.local` and evicted from the oldest of 50 entries.
-
----
-
-### 5. Popup, Two-Column Dashboard & Adaptive Practice Recommender
+### 4. Popup, Two-Column Dashboard & Adaptive Practice Recommender
 
 <p align="center">
   <img src="docs/images/popup-dashboard.png" alt="CFChart compact 380px popup and full-page two-column practice dashboard" width="100%" />
@@ -87,7 +79,7 @@
 
 ---
 
-### 6. Privacy, Shadow DOM Isolation & Rate-Limited Queuing
+### 5. Privacy, Shadow DOM Isolation & Rate-Limited Queuing
 
 * **Shadow DOM encapsulation:** All in-page overlays (`#cfchart-personal-host`, `#cfchart-profile-host`, `#cfchart-problem-host`) mount inside Shadow DOM containers so Codeforces stylesheets and extension styles never collide.
 * **Strict profile vs. personal handle separation:** Visiting another user's Codeforces profile updates only the chart on that page; your personal handle, streak, timer sessions, and recommendations stay isolated to your configured account.

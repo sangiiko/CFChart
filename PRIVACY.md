@@ -17,7 +17,6 @@ CFChart does not transmit practice records to us. We do not operate tracking ser
   - Public rating change history (`user.rating`)
   - Public submission history (`user.status`)
   - Public problemset catalog and statistics (`problemset.problems`, `contest.list`)
-* **Public Codeforces Pages:** When you ask to read the fastest accepted solutions for a problem you have already solved, CFChart loads Codeforces' public status and submission-source pages from the same page context. Your browser attaches its normal Codeforces cookies to that request exactly as it does for any page you visit. CFChart itself never reads, stores, or transmits cookies, passwords, or API keys.
 * **No Authentication Credentials:** CFChart never requests, accesses, stores, or transmits Codeforces passwords, session cookies, or secret API keys.
 
 ### 3. Local Data Storage
@@ -25,7 +24,6 @@ All data handled by CFChart is stored **strictly locally** on your device using 
 * Your chosen Codeforces handle and daily problem target
 * Local caches of public contest ratings and submission history to minimize network requests
 * Local caching of the public problem catalog and contest metadata
-* Local caching of other users' accepted solutions for problems you have solved (up to 50 problems, oldest removed first)
 * Your practice time budget, assigned plans, and optional self-reported outcomes, assistance, active minutes, and timestamps
 
 CFChart does not automatically upload this stored data. You can export your local practice records as a JSON file; the export includes your handle, so review it before sharing. The practice panel can delete local plans and feedback for the selected handle. Public API caches and settings remain until you clear extension data or uninstall the extension.
