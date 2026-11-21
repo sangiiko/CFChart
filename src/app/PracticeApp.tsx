@@ -77,12 +77,18 @@ export function PracticeApp({ fullPage = false }: { fullPage?: boolean }) {
     const form = new FormData(event.currentTarget);
     const handle = String(form.get('handle') ?? '').trim();
     const dailyTarget = Number(form.get('target'));
-    const practiceMinutes = Number(form.get('minutes'));
+    const rawMinutes = form.get('minutes');
+    const practiceMinutes = rawMinutes !== null ? Number(rawMinutes) : undefined;
     setLoading(true);
     setError('');
     try {
       const user = handle ? (await getProfile(handle)).user : null;
-      const prefs = await updatePreferences({ personalHandle: user?.handle ?? null, dailyTarget, practiceMinutes, practiceMode: 'adaptive' });
+      const prefs = await updatePreferences({
+        personalHandle: user?.handle ?? null,
+        dailyTarget,
+        ...(practiceMinutes !== undefined ? { practiceMinutes } : {}),
+        practiceMode: 'adaptive',
+      });
       setPreferences(prefs);
       setEditing(false);
       setPractice(null);
@@ -115,8 +121,12 @@ export function PracticeApp({ fullPage = false }: { fullPage?: boolean }) {
           <select id="daily-target" name="target" defaultValue={preferences?.dailyTarget ?? 2}>
             {Array.from({ length: 10 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1} {i ? 'problems' : 'problem'} / day</option>)}
           </select>
-          <label htmlFor="practice-minutes">Daily practice time (minutes)</label>
-          <input id="practice-minutes" name="minutes" type="number" min="20" max="240" defaultValue={preferences?.practiceMinutes ?? 60} required />
+          {personalHandle && (
+            <>
+              <label htmlFor="practice-minutes">Daily practice time (minutes)</label>
+              <input id="practice-minutes" name="minutes" type="number" min="20" max="240" defaultValue={preferences?.practiceMinutes ?? 60} required />
+            </>
+          )}
           <p className="muted">Uses public Codeforces data. No password needed. Your tracked handle stays the same when you view other profiles.</p>
           <div className="button-row"><button className="button button--primary" disabled={loading}>{loading ? 'Saving…' : personalHandle ? 'Save settings' : 'Connect and continue'}</button>{personalHandle && <button type="button" className="button" onClick={() => setEditing(false)}>Cancel</button>}</div>
         </form>
