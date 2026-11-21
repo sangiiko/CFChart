@@ -1,12 +1,23 @@
-import { improveSession, tagOverlapPenalty } from './scheduler';
-import type { RecommendedProblem } from '../types/codeforces';
-import type { EnrichedProblem, UserPracticeState } from './types';
+import { improveSession, sessionUtility } from './scheduler';
+import type { RecommendedProblem, RecSlot } from '../types/codeforces';
+import type { Candidate, EnrichedProblem, UserPracticeState } from './types';
 import { estimateSkill } from './skill';
 import { problemKey } from './state';
 import { buildCandidates } from './candidates';
 import { countResolvedReviewsOnDay, MAX_DAILY_REVIEWS } from './retention';
 
 export const POLICY_VERSION = 'adaptive-baseline-v2' as const;
+
+const SLOT_ORDER: Record<RecSlot, number> = {
+  revisit: 0,
+  warmup: 1,
+  core: 2,
+  upsolve: 3,
+  stretch: 4,
+  timed: 2,
+  guided: 2,
+  transfer: 3,
+};
 
 export interface ScheduledReviewOptions {
   maxReviews?: number;
@@ -38,15 +49,15 @@ export function selectRecommendationsV2(
     ? allCandidates.filter(candidate => candidate.modern || candidate.item.slot === 'revisit' || pinnedKeys.has(problemKey(candidate.item)))
     : allCandidates;
 
-  const selected: RecommendedProblem[] = [];
+  const selected: Candidate[] = [];
   const used = new Set<string>();
   let remaining = Math.min(240, budget);
   let revisitCount = 0;
-  const add = (item: RecommendedProblem) => {
-    selected.push(item);
-    used.add(problemKey(item));
-    remaining -= item.plannedMinutes;
-    if (item.slot === 'revisit') revisitCount++;
+  const add = (candidate: Candidate) => {
+    selected.push(candidate);
+    used.add(problemKey(candidate.item));
+    remaining -= candidate.item.plannedMinutes;
+    if (candidate.item.slot === 'revisit') revisitCount++;
   };
 
   for (const previous of pinned) {
@@ -59,49 +70,61 @@ export function selectRecommendationsV2(
       (previous.slot !== 'revisit' || revisitCount < MAX_DAILY_REVIEWS)
     ) {
       add({
-        ...candidate.item,
-        ...previous,
-        tags: previous.tags?.length ? previous.tags : candidate.item.tags,
-        qualityScore: candidate.item.qualityScore,
-        ...(previous.shadowAcceptance === undefined && candidate.item.shadowAcceptance !== undefined
-          ? { shadowAcceptance: candidate.item.shadowAcceptance }
-          : {}),
+        ...candidate,
+        item: {
+          ...candidate.item,
+          ...previous,
+          tags: previous.tags?.length ? previous.tags : candidate.item.tags,
+          qualityScore: candidate.item.qualityScore,
+          ...(previous.shadowAcceptance === undefined && candidate.item.shadowAcceptance !== undefined
+            ? { shadowAcceptance: candidate.item.shadowAcceptance }
+            : {}),
+        },
       });
     }
   }
 
   while (selected.length < limit) {
-    const ranked = candidates
-      .filter(
-        c =>
-          !used.has(problemKey(c.item)) &&
-          c.item.plannedMinutes <= remaining &&
-          (c.item.slot !== 'revisit' || revisitCount < MAX_DAILY_REVIEWS)
-      )
-      .map(c => ({
-        ...c,
-        marginal:
-          c.score -
-          selected.reduce(
-            (penalty, s) =>
-              penalty +
-              (s.contestId === c.item.contestId ? 0.2 : 0) +
-              tagOverlapPenalty(s.tags, c.item.tags),
-            0
-          ),
-      }));
+    const baseUtility = sessionUtility(selected);
+    const feasible = candidates.filter(
+      c =>
+        !used.has(problemKey(c.item)) &&
+        c.item.plannedMinutes <= remaining &&
+        (c.item.slot !== 'revisit' || revisitCount < MAX_DAILY_REVIEWS)
+    );
+    if (!feasible.length) break;
+
+    const slotsAfter = limit - selected.length - 1;
+    let pool = feasible;
+    if (slotsAfter > 0) {
+      const minStep = feasible.reduce((min, c) => Math.min(min, c.item.plannedMinutes), Infinity);
+      const capacityPreserving = feasible.filter(c => remaining - c.item.plannedMinutes >= slotsAfter * minStep);
+      if (capacityPreserving.length) pool = capacityPreserving;
+    }
+
+    const ranked = pool.map(c => ({
+      ...c,
+      marginal: sessionUtility([...selected, c]) - baseUtility,
+    }));
 
     ranked.sort(
       (a, b) =>
-        b.marginal / b.item.plannedMinutes - a.marginal / a.item.plannedMinutes ||
+        b.marginal - a.marginal ||
         problemKey(a.item).localeCompare(problemKey(b.item))
     );
 
     if (!ranked[0]) break;
-    add(ranked[0].item);
+    add(ranked[0]);
   }
 
-  return improveSession(selected, candidates, Math.min(240, budget), new Set(pinned.map(problemKey)));
+  const improved = improveSession(
+    selected.map(c => c.item),
+    candidates,
+    Math.min(240, budget),
+    pinnedKeys
+  );
+  // Present momentum/review tasks before stretch tasks while preserving deterministic ties.
+  return [...improved].sort((a, b) => (SLOT_ORDER[a.slot] ?? 3) - (SLOT_ORDER[b.slot] ?? 3));
 }
 
 /**

@@ -15,6 +15,7 @@ function PracticeCard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const isRevisit = problem.slot === 'revisit';
+  const isWarmup = problem.slot === 'warmup';
   const key = `${problem.contestId}-${problem.index}`;
 
   const handleReviewAction = async (outcome: PracticeOutcome) => {
@@ -35,9 +36,9 @@ function PracticeCard({
   };
 
   return (
-    <article className={`practice-task${isRevisit ? ' practice-task--revisit' : ''}`}>
+    <article className={`practice-task${isRevisit ? ' practice-task--revisit' : isWarmup ? ' practice-task--warmup' : ''}`}>
       <div className="practice-task-meta">
-        <span className={isRevisit ? 'practice-task-badge practice-task-badge--revisit' : 'practice-task-badge'}>
+        <span className={isRevisit ? 'practice-task-badge practice-task-badge--revisit' : isWarmup ? 'practice-task-badge practice-task-badge--warmup' : 'practice-task-badge'}>
           {problem.slotLabel}
         </span>
         <span>Rating {problem.rating}</span>
@@ -94,11 +95,15 @@ export function PracticeRecommendations({
   handle,
   expandedByDefault = false,
   onFeedbackRecorded,
+  lightDay = false,
+  onToggleLightDay,
 }: {
   recommendations: RecommendedProblem[];
   handle?: string;
   expandedByDefault?: boolean;
   onFeedbackRecorded?: () => void;
+  lightDay?: boolean;
+  onToggleLightDay?: () => void;
 }) {
   const [showAll, setShowAll] = useState(expandedByDefault);
   const [resolvedKeys, setResolvedKeys] = useState<Set<string>>(() => new Set());
@@ -144,12 +149,27 @@ export function PracticeRecommendations({
 
   return (
     <section ref={sectionRef} className="practice-session" aria-label="Practice session">
+      {(visibleRecommendations.length > 0 || onToggleLightDay) && (
+        <div className="practice-session-heading">
+          <h2>Next problem</h2>
+          <div className="practice-session-meta">
+            {visibleRecommendations.length > 0 && <span>{visibleRecommendations.length} available</span>}
+            {onToggleLightDay && (
+              <button
+                type="button"
+                className={`practice-light-toggle${lightDay ? ' is-active' : ''}`}
+                aria-pressed={lightDay}
+                onClick={onToggleLightDay}
+                title="Pick an easier problem below your rating for today (resets tomorrow)"
+              >
+                {lightDay ? 'Light day ✓' : 'Light day'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
       {visibleRecommendations.length ? (
         <>
-          <div className="practice-session-heading">
-            <h2>Next problem</h2>
-            <span>{visibleRecommendations.length} available</span>
-          </div>
           {shown.map(problem => (
             <PracticeCard
               key={`${problem.contestId}-${problem.index}`}

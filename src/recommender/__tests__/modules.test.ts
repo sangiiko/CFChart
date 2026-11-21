@@ -15,6 +15,7 @@ import {
   problemEmbedding,
   semanticTagSimilarity,
   problemSimilarity,
+  recentConceptOverlapPenalty,
   selectMostInformativeWeakTag,
   transferSimilarityScore,
   tagInformationWeight,
@@ -202,7 +203,8 @@ describe('policy logging and disabled models', () => {
     expect(defaultSessionAllowance('core', 60)).toBe(30);
     expect(defaultSessionAllowance('revisit', 60)).toBe(20);
     expect(defaultSessionAllowance('stretch', 60)).toBe(40);
-    expect(safeReviewIntervalDays('assisted')).toBe(3);
+    expect(safeReviewIntervalDays('assisted')).toBe(6);
+    expect(safeReviewIntervalDays('assisted', 2)).toBe(4);
     expect(safeReviewIntervalDays('skipped')).toBe(7);
   });
 
@@ -292,6 +294,20 @@ describe('semantic concept embeddings, catalog quality, and IRT topic diagnostic
       now
     );
     expect(transferScore).toBeGreaterThan(0.5);
+
+    const recentGreedyEvents = [1, 2, 3].map(i => ({
+      version: 1 as const,
+      id: `recent-${i}`,
+      problemKey: `${20 + i}-A`,
+      problem: { ...assistedProblem, contestId: 20 + i, tags: ['greedy', 'constructive algorithms', 'math'] },
+      outcome: 'assisted' as const,
+      timestamp: now - i * 12 * 3600 * 1000,
+      provenance: 'self-report' as const,
+    }));
+    const sameClusterPenalty = recentConceptOverlapPenalty(['greedy', 'constructive algorithms'], recentGreedyEvents, now);
+    const freshTopicPenalty = recentConceptOverlapPenalty(['trees', 'dfs and similar'], recentGreedyEvents, now);
+    expect(sameClusterPenalty).toBeGreaterThan(0.1);
+    expect(freshTopicPenalty).toBe(0);
   });
 
   it('incorporates problem difficulty into IRT topic skill, uncertainty, and zero-sum contrasts', () => {

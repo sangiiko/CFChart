@@ -28,7 +28,15 @@ export function isProblemEligible(
   if (!Number.isFinite(p.rating) || !p.contestId) return false;
   // Bounded eligibility: strictly reject distant difficulty fallbacks first (fastest filter),
   // but keep due scheduled reviews even if the user's estimated rating has shifted.
-  if (!ctx.review && (p.rating! < ctx.target - 200 || p.rating! > ctx.target + 300)) return false;
+  if (!ctx.review) {
+    if (state.lightDay) {
+      const minWarmup = Math.max(800, ctx.target - 300);
+      const maxWarmup = Math.max(800, ctx.target);
+      if (p.rating! < minWarmup || p.rating! > maxWarmup) return false;
+    } else if (p.rating! < ctx.target - 200 || p.rating! > ctx.target + 300) {
+      return false;
+    }
+  }
   if (p.contestPhase && p.contestPhase !== 'FINISHED') return false;
   if (p.qualityScore <= 0) return false;
 

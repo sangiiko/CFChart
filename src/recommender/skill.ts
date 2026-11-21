@@ -1,37 +1,82 @@
-import type { SkillProfile, UserPracticeState } from './types';
+import type { PracticeEvent, SkillProfile, UserPracticeState } from './types';
 
-/** Conservative ability and topic gap estimation from public Codeforces activity and explicit timed feedback. */
+const DAY_MS = 86_400_000;
+const IRT_SCALE = 150;
+
+/**
+ * Regularized MAP Logistic IRT estimator for independent practice ability.
+ * Finds theta maximizing:
+ *   -(theta - priorMean)^2 / (2 * priorSigma^2) + sum_i w_i [y_i log p_i + (1 - y_i) log(1 - p_i)]
+ * Strictly concave globally; 8 Newton steps converge to machine precision.
+ */
+function fitIrtTheta(
+  items: readonly PracticeEvent[],
+  priorMean: number,
+  now: number,
+  priorSigma = 150,
+  maxShift = 300
+): number {
+  if (items.length < 3) return priorMean;
+  const priorPrecision = 1 / (priorSigma * priorSigma);
+  let theta = priorMean;
+
+  for (let iter = 0; iter < 8; iter++) {
+    let grad = -(theta - priorMean) * priorPrecision;
+    let negHess = priorPrecision;
+
+    for (const e of items) {
+      const y = e.outcome === 'independent' ? 1 : 0;
+      const d = Number.isFinite(e.problem.rating) ? e.problem.rating : priorMean;
+      const ageDays = Math.max(0, (now - e.timestamp) / DAY_MS);
+      const recency = 2 ** (-ageDays / 45);
+      const timeWeight =
+        e.outcome === 'independent'
+          ? e.minutes === undefined
+            ? 0.9
+            : e.minutes <= 25
+              ? 1.15
+              : e.minutes <= 45
+                ? 1.0
+                : e.minutes <= 65
+                  ? 0.8
+                  : 0.65
+          : 1.0;
+      const w = recency * timeWeight;
+      const z = Math.max(-35, Math.min(35, (d - theta) / IRT_SCALE));
+      const p = 1 / (1 + Math.exp(z));
+      grad += (w * (y - p)) / IRT_SCALE;
+      negHess += (w * p * (1 - p)) / (IRT_SCALE * IRT_SCALE);
+    }
+
+    const step = grad / negHess;
+    theta += step;
+    if (Math.abs(step) < 1e-6) break;
+  }
+
+  const shift = Math.max(-maxShift, Math.min(maxShift, theta - priorMean));
+  return Math.max(800, priorMean + shift);
+}
+
+/** Conservative ability and topic gap estimation from public Codeforces activity and self-reported practice outcomes. */
 export function estimateSkill(state: UserPracticeState): SkillProfile {
-  // Explicit timed feedback episodes (self-report with timer/minutes)
-  const recentFeedback = state.events.filter(
-    e =>
-      e.timestamp <= state.now &&
-      state.now - e.timestamp < 90 * 86400000 &&
-      (e.outcome === 'independent' || e.outcome === 'timeout') &&
-      e.minutes !== undefined &&
-      e.minutes >= 1 &&
-      !['revisit', 'guided', 'transfer', 'timed'].includes(e.problem.slot) &&
-      (e.outcome === 'timeout' ? e.minutes >= e.problem.plannedMinutes : e.minutes <= e.problem.plannedMinutes)
-  );
+  // Self-reported practice outcomes over the last 90 days (independent, assisted, timeout).
+  // Revisit reviews and guided study are excluded so new-problem calibration reflects fresh attempts.
+  const recentFeedback = state.events
+    .filter(
+      e =>
+        e.timestamp <= state.now &&
+        state.now - e.timestamp < 90 * DAY_MS &&
+        e.provenance === 'self-report' &&
+        (e.outcome === 'independent' || e.outcome === 'assisted' || e.outcome === 'timeout') &&
+        !['revisit', 'guided'].includes(e.problem.slot)
+    )
+    .sort((a, b) => a.timestamp - b.timestamp || a.id.localeCompare(b.id));
 
-  // A problem contributes once, even if feedback is repeated
-  const episodes = [...new Map(recentFeedback.map(e => [e.problemKey, e])).values()].slice(-30);
+  // Each problem contributes once using its latest self-reported outcome
+  const episodes = [...new Map(recentFeedback.map(e => [e.problemKey, e])).values()].slice(-40);
 
-  const feedbackAdjustment = (items: typeof episodes) => {
-    if (items.length < 3) return 0;
-    const sum = items.reduce(
-      (total, e) =>
-        total +
-        (e.outcome === 'independent'
-          ? Math.max(-100, Math.min(200, e.problem.rating - state.recentRating + 100))
-          : Math.max(-200, Math.min(0, e.problem.rating - state.recentRating - 100))),
-      0
-    );
-    return Math.max(-200, Math.min(200, sum / (items.length + 5)));
-  };
-
-  // Global ability starts at recent rating, adjusted only by verified independent timed feedback
-  const globalTheta = Math.max(800, state.recentRating + feedbackAdjustment(episodes));
+  // Global ability starts at recent rating and calibrates via MAP Logistic IRT
+  const globalTheta = Math.max(800, fitIrtTheta(episodes, state.recentRating, state.now, 150, 300));
 
   // Topic deviations delta_k from public submission activity and timed feedback
   const tagDeviations = new Map<string, number>();
@@ -83,7 +128,7 @@ export function estimateSkill(state: UserPracticeState): SkillProfile {
   for (const tag of new Set(episodes.flatMap(e => e.problem.tags))) {
     const tagged = episodes.filter(e => e.problem.tags.includes(tag));
     if (tagged.length >= 3) {
-      const adj = feedbackAdjustment(tagged);
+      const adj = fitIrtTheta(tagged, globalTheta, state.now, 140, 200) - globalTheta;
       tagDeviations.set(tag, (tagDeviations.get(tag) ?? 0) * 0.5 + adj * 0.5);
       const prevUnc = tagUncertainty.get(tag) ?? 200;
       tagUncertainty.set(tag, prevUnc / Math.sqrt(1 + tagged.length / 2));

@@ -7,6 +7,8 @@ export interface Preferences {
   dailyTarget: number;
   practiceMinutes?: number;
   practiceMode?: 'adaptive' | 'timed' | 'guided' | 'transfer';
+  /** Local date string (YYYY-MM-DD) when light-day (easier warmup) mode is active for today. */
+  lightDay?: string | null;
   predictionParams: PredictionParams;
   chartView: 'enhanced' | 'original';
 }
@@ -62,6 +64,7 @@ export type ExtensionRequest =
   | { type: 'CFCHART_REQUEST'; action: 'removeTodaySolve'; handle: string; key: string }
   | { type: 'CFCHART_REQUEST'; action: 'recordPracticeFeedback'; handle: string; feedback: PracticeFeedback }
   | { type: 'CFCHART_REQUEST'; action: 'exportPracticeData'; handle: string }
+  | { type: 'CFCHART_REQUEST'; action: 'importPracticeData'; handle: string; payload: unknown }
   | { type: 'CFCHART_REQUEST'; action: 'clearPracticeData'; handle: string }
   | { type: 'CFCHART_REQUEST'; action: 'practiceSession'; handle: string; key: string; event?: { id: string; action: SessionAction } }
   | { type: 'CFCHART_REQUEST'; action: 'recordPracticeImpressions'; handle: string; problemKeys: string[]; day: string }

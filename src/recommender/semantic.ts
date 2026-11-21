@@ -233,3 +233,51 @@ export function transferSimilarityScore(
   }
   return Math.max(0, Math.min(1, best));
 }
+
+/**
+ * Penalize candidates whose 8D algorithmic concept cluster heavily overlaps the user's
+ * last 3 days of practice (preventing consecutive days of pure ad-hoc/constructive/math ruts).
+ * Returns a bounded penalty in [0, 0.22].
+ */
+export function recentConceptOverlapPenalty(
+  tags: readonly string[],
+  events: readonly PracticeEvent[],
+  now: number
+): number {
+  if (!tags.length || !events.length) return 0;
+  const recentWindowMs = 3 * DAY_MS;
+  const recentByProblem = new Map<string, PracticeEvent>();
+  for (const e of events) {
+    if (
+      e.timestamp > now ||
+      now - e.timestamp > recentWindowMs ||
+      e.problem.slot === 'revisit' ||
+      !e.problem.tags?.length ||
+      !['independent', 'assisted', 'accepted', 'timeout'].includes(e.outcome)
+    ) {
+      continue;
+    }
+    const prev = recentByProblem.get(e.problemKey);
+    if (!prev || e.timestamp > prev.timestamp) recentByProblem.set(e.problemKey, e);
+  }
+  const recent = [...recentByProblem.values()]
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, 6);
+  if (!recent.length) return 0;
+
+  const candEmb = problemEmbedding(tags);
+  let weightedSim = 0;
+  let weightSum = 0;
+  for (const e of recent) {
+    const emb = problemEmbedding(e.problem.tags);
+    let cos = 0;
+    for (let i = 0; i < candEmb.length; i++) cos += candEmb[i] * emb[i];
+    const ageDays = Math.max(0, (now - e.timestamp) / DAY_MS);
+    const weight = Math.exp(-ageDays / 2);
+    weightedSim += weight * Math.max(0, Math.min(1, cos));
+    weightSum += weight;
+  }
+  if (weightSum <= 0) return 0;
+  const avgSim = weightedSim / weightSum;
+  return avgSim > 0.45 ? Math.min(0.22, 0.4 * (avgSim - 0.45)) : 0;
+}

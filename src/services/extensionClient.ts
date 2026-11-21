@@ -44,6 +44,7 @@ export function subscribeToChanges(callback: (changedKeys?: string[]) => void): 
 
 export const recordPracticeFeedback = (handle: string, feedback: PracticeFeedback) => request<void>({ type: 'CFCHART_REQUEST', action: 'recordPracticeFeedback', handle, feedback });
 export const exportPracticeData = (handle: string) => request<unknown>({ type: 'CFCHART_REQUEST', action: 'exportPracticeData', handle });
+export const importPracticeData = (handle: string, payload: unknown) => request<{ importedEvents: number; totalEvents: number }>({ type: 'CFCHART_REQUEST', action: 'importPracticeData', handle, payload });
 export const clearPracticeData = (handle: string) => request<void>({ type: 'CFCHART_REQUEST', action: 'clearPracticeData', handle });
 
 export const practiceSession = (handle: string, key: string, event?: { id: string; action: SessionAction }) => request<SessionState | null>({ type: 'CFCHART_REQUEST', action: 'practiceSession', handle, key, event });

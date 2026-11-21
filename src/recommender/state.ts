@@ -52,7 +52,19 @@ export function buildPracticeState(
     }
   }
 
-  for (const episode of episodes.values()) {
+  const latestSelfReport = new Map<string, PracticeEvent>();
+  for (const event of events) {
+    if (event.timestamp > now || event.provenance !== 'self-report') continue;
+    const prev = latestSelfReport.get(event.problemKey);
+    if (!prev || event.timestamp >= prev.timestamp) latestSelfReport.set(event.problemKey, event);
+  }
+  const assistedOnlyKeys = new Set(
+    [...latestSelfReport.entries()]
+      .filter(([, ev]) => ev.outcome === 'assisted')
+      .map(([key]) => key)
+  );
+
+  for (const [key, episode] of episodes.entries()) {
     let hasOk = false;
     let latestMs = 0;
     let problemRating = NaN;
@@ -65,7 +77,8 @@ export function buildPracticeState(
         for (const tag of s.problem.tags) tags.add(tag);
       }
     }
-    const okInc = hasOk ? 1 : 0;
+    // Problems accepted only after viewing hints/editorial do not count as independent topic mastery.
+    const okInc = hasOk && !assistedOnlyKeys.has(key) ? 1 : 0;
     const ageDays = Math.max(0, (now - latestMs) / DAY_MS);
     const recencyWeight = 2 ** (-ageDays / 45);
     const effectiveRating = Number.isFinite(problemRating) ? problemRating : recentRating;

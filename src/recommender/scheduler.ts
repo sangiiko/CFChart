@@ -12,9 +12,26 @@ export function tagOverlapPenalty(tagsA: readonly string[], tagsB: readonly stri
   return shared > 0 ? 0.15 + 0.05 * (shared - 1) : 0;
 }
 
-/** Heuristic utility function F(S) balancing candidate scores and diversity coverage; not a prediction of learning gain. */
+/** Reward a balanced multi-problem session (momentum core + growth stretch/upsolve) and discourage stacking multiple stretch walls. */
+export function slotBalanceBonus(items: readonly Candidate[]): number {
+  if (items.length < 2) return 0;
+  let coreCount = 0;
+  let stretchCount = 0;
+  let upsolveCount = 0;
+  for (const c of items) {
+    if (c.item.slot === 'core') coreCount++;
+    else if (c.item.slot === 'stretch') stretchCount++;
+    else if (c.item.slot === 'upsolve') upsolveCount++;
+  }
+  let bonus = 0;
+  if (coreCount >= 1 && stretchCount + upsolveCount >= 1) bonus += 0.25;
+  if (stretchCount >= 2) bonus -= 0.18 * (stretchCount - 1);
+  return bonus;
+}
+
+/** Heuristic utility function F(S) balancing candidate scores, slot mix, and diversity coverage; not a prediction of learning gain. */
 export function sessionUtility(items: Candidate[]): number {
-  let value = items.reduce((s, c) => s + c.score, 0);
+  let value = items.reduce((s, c) => s + c.score, 0) + slotBalanceBonus(items);
   for (let i = 0; i < items.length; i++) {
     for (let j = 0; j < i; j++) {
       if (items[i].item.contestId === items[j].item.contestId) value -= 0.2;

@@ -44,8 +44,8 @@ describe('research model mechanics', () => {
     // Same-session API acceptance echo does not graduate an assisted solve,
     // whereas a later-day API acceptance or independent self-report graduates it permanently.
     const sameSessionEcho = evaluateReviewState('1-A', [
-      { id: 'assist', version: 1, problemKey: '1-A', outcome: 'assisted', timestamp: now - 4 * day, problem: baseProb, provenance: 'self-report' },
-      { id: 'cf-echo', version: 1, problemKey: '1-A', outcome: 'accepted', timestamp: now - 4 * day + 60_000, problem: baseProb, provenance: 'codeforces-api' },
+      { id: 'assist', version: 1, problemKey: '1-A', outcome: 'assisted', timestamp: now - 7 * day, problem: baseProb, provenance: 'self-report' },
+      { id: 'cf-echo', version: 1, problemKey: '1-A', outcome: 'accepted', timestamp: now - 7 * day + 60_000, problem: baseProb, provenance: 'codeforces-api' },
     ], now);
     expect(sameSessionEcho.awaitingReview).toBe(true);
     expect(sameSessionEcho.isDue).toBe(true);

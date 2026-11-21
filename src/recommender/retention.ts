@@ -69,9 +69,10 @@ export function isRetentionModelDeployable(): false {
   return false;
 }
 
-/** Adaptive fallback review schedule: 3 days for assisted solves, 7 days for skipped problems. */
-export function safeReviewIntervalDays(outcome: string): number {
-  return outcome === 'skipped' ? 7 : 3;
+/** Adaptive fallback review schedule: 6 days after initial assisted solve (4 days after repeat lapse), 7 days for snoozed reviews. */
+export function safeReviewIntervalDays(outcome: string, lapses = 1): number {
+  if (outcome === 'skipped') return 7;
+  return lapses >= 2 ? 4 : 6;
 }
 
 function sortProblemEvents(events: readonly PracticeEvent[], problemKey: string, now: number): PracticeEvent[] {
@@ -115,7 +116,7 @@ export function evaluateReviewState(
       anchorAt = event.timestamp;
       lapses++;
       snoozes = 0;
-      intervalDays = safeReviewIntervalDays('assisted');
+      intervalDays = safeReviewIntervalDays('assisted', lapses);
     } else if (event.outcome === 'independent') {
       if (awaitingReview || lastAssistedAt !== null) graduated = true;
       awaitingReview = false;
@@ -143,7 +144,7 @@ export function evaluateReviewState(
       ) {
         lapses++;
         anchorAt = event.timestamp;
-        intervalDays = safeReviewIntervalDays('assisted');
+        intervalDays = safeReviewIntervalDays('assisted', lapses);
       }
     } else if (event.outcome === 'accepted') {
       if (

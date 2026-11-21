@@ -8,7 +8,7 @@ import { latestEvents } from './events';
 import modelJson from './acceptance-model.json';
 import { buildAcceptanceFeaturesFromHistory } from './features';
 import { predictHistoricalAcceptanceModel, type AcceptanceModel } from './inference';
-import { selectMostInformativeWeakTag, transferSimilarityScore } from './semantic';
+import { recentConceptOverlapPenalty, selectMostInformativeWeakTag, transferSimilarityScore } from './semantic';
 import { estimateMemoryState, evaluateReviewState } from './retention';
 import { problemKey } from './state';
 
@@ -39,19 +39,41 @@ export function buildCandidates(
     if (!Number.isFinite(p.rating) || !p.contestId) return [];
     const review = isScheduledReview(p, state, latest);
     // Fast range pre-check for non-review problems before expensive eligibility checks
-    if (!review && (p.rating! < target - 200 || p.rating! > target + 300)) return [];
+    if (!review) {
+      if (state.lightDay) {
+        if (p.rating! < Math.max(800, target - 300) || p.rating! > Math.max(800, target)) return [];
+      } else if (p.rating! < target - 200 || p.rating! > target + 300) {
+        return [];
+      }
+    }
 
     if (!isProblemEligible(p, state, { target, review }, latest)) return [];
 
-    const weakTag = selectMostInformativeWeakTag(p.tags, skill.tagTheta, target);
-    const upsolve = !review && isRecentUpsolve(p, state);
+    const weakTag = state.lightDay ? undefined : selectMostInformativeWeakTag(p.tags, skill.tagTheta, target);
+    const upsolve = !review && !state.lightDay && isRecentUpsolve(p, state);
     const mode = state.mode ?? 'adaptive';
 
     const slot: RecSlot =
-      mode !== 'adaptive' ? mode : review ? 'revisit' : upsolve ? 'upsolve' : p.rating! > target + 100 ? 'stretch' : 'core';
+      mode !== 'adaptive'
+        ? mode
+        : review
+          ? 'revisit'
+          : state.lightDay
+            ? 'warmup'
+            : upsolve
+              ? 'upsolve'
+              : p.rating! > target + 50
+                ? 'stretch'
+                : 'core';
 
     const plannedMinutes =
-      slot === 'revisit' ? 20 : slot === 'stretch' ? 40 : Math.min(30, Math.max(20, Math.floor(budget)));
+      slot === 'revisit'
+        ? 20
+        : slot === 'warmup'
+          ? Math.min(25, Math.max(20, Math.floor(budget)))
+          : slot === 'stretch'
+            ? 40
+            : Math.min(30, Math.max(20, Math.floor(budget)));
 
     const key = problemKey(p);
     const reviewStatus = review ? evaluateReviewState(key, pastEvents, state.now) : null;
@@ -78,18 +100,37 @@ export function buildCandidates(
       url: getProblemUrl(p.contestId!, p.index),
     };
 
-    const targetRating = weakTag ? (skill.tagTheta.get(weakTag) ?? target) + 100 : target + 100;
+    const targetRating =
+      slot === 'warmup'
+        ? Math.max(800, target - 150)
+        : slot === 'stretch'
+          ? target + 100
+          : slot === 'upsolve'
+            ? target + 50
+            : slot === 'core'
+              ? weakTag
+                ? Math.max(800, skill.tagTheta.get(weakTag) ?? target)
+                : Math.max(800, target - 40)
+              : target;
     const modern = isModernContestProblem(p, state.now);
     const qualityAdj = Number.isFinite(p.qualityScore) ? 0.12 * (p.qualityScore - 1) : 0;
+    const conceptCooldown = review || upsolve ? 0 : recentConceptOverlapPenalty(p.tags, pastEvents, state.now);
+    const slotPrior =
+      slot === 'core'
+        ? 0.08
+        : slot === 'warmup' && p.rating! <= target - 50
+          ? 0.12
+          : 0;
     // In a sparse modern pool, prefer recent ratings and higher-quality problems when otherwise comparable.
-    const baseScore = scoreProblem(p, targetRating, false, !!weakTag) + (modern ? 0.4 : 0) + qualityAdj;
+    const baseScore =
+      scoreProblem(p, targetRating, false, !!weakTag) + (modern ? 0.4 : 0) + qualityAdj + slotPrior - conceptCooldown;
 
     let bonus = 0;
     if (review) {
       const memory = estimateMemoryState(key, pastEvents, state.now, p.rating!, state.recentRating);
       bonus = 0.5 + 0.15 * memory.urgency;
     } else if (upsolve) {
-      bonus = 0.35;
+      bonus = p.rating! <= target + 150 ? 0.35 : 0.15;
     } else if (slot === 'transfer') {
       bonus = 0.25 * transferSimilarityScore(p, pastEvents, state.now);
     }

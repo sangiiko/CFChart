@@ -20,7 +20,7 @@ export function explainRecommendation({ slot, target, plannedMinutes, weakTag, r
           `Solved with help ${days} day${days === 1 ? '' : 's'} ago; re-solve independently to lock in the idea.`
         );
       } else {
-        reasons.push('Independent review after an assisted solve; the 3-day interval is a starting schedule.');
+        reasons.push('Independent review after an assisted solve; the 6-day interval is a starting schedule.');
       }
       break;
     case 'upsolve':
@@ -38,14 +38,14 @@ export function explainRecommendation({ slot, target, plannedMinutes, weakTag, r
       );
       break;
     case 'stretch':
-      reasons.push(`Challenging stretch task above target (${Math.round(target + 100)}+ rating).`);
+      reasons.push(`Challenging stretch task above your practice level (${Math.round(target + 50)}+ rating).`);
       break;
     case 'warmup':
-      reasons.push(`Quick warm-up problem below target rating.`);
+      reasons.push('Light-day pick below your practice level to build momentum.');
       break;
     case 'core':
     default:
-      reasons.push(`Within your current practice range (${Math.round(target - 200)}–${Math.round(target + 300)}).`);
+      reasons.push(`Targeted near your independent practice level (${Math.round(target - 150)}–${Math.round(target + 50)}).`);
       break;
   }
 

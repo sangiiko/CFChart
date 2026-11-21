@@ -63,4 +63,22 @@ describe('practice recommendation UI', () => {
     const buttons = [...container.querySelectorAll('.practice-review-btn')].map(b => b.textContent);
     expect(buttons).toEqual(['Mark reviewed', 'Snooze 7d', 'Dismiss']);
   });
+
+  it('renders the Light day toggle when provided and invokes callback on click', async () => {
+    let toggled = 0;
+    await act(async () =>
+      root.render(
+        <PracticeRecommendations
+          recommendations={[problem]}
+          lightDay={false}
+          onToggleLightDay={() => { toggled++; }}
+        />
+      )
+    );
+    const btn = container.querySelector<HTMLButtonElement>('.practice-light-toggle')!;
+    expect(btn).not.toBeNull();
+    expect(btn.getAttribute('aria-pressed')).toBe('false');
+    await act(async () => btn.click());
+    expect(toggled).toBe(1);
+  });
 });

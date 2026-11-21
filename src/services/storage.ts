@@ -29,6 +29,18 @@ function requireStorage() {
   return storage;
 }
 
+import type { SyncStorageAdapter } from './ledgerBackup';
+
+export function getSyncStorage(): SyncStorageAdapter | undefined {
+  const sync = getExtensionApi()?.storage?.sync;
+  if (!sync) return undefined;
+  return {
+    get: keys => sync.get(keys) as Promise<Record<string, unknown>>,
+    set: items => sync.set(items),
+    remove: keys => sync.remove(keys),
+  };
+}
+
 /** Extension data never falls back to Codeforces' own localStorage. */
 export const storageService = {
   async get<K extends keyof StorageData>(key: K): Promise<StorageData[K] | undefined> {

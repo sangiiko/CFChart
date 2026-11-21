@@ -2,7 +2,16 @@ import { appendSession, replaySession, sessionElapsed, type SessionAction } from
 import type { CachedCatalog, CachedPractice, HistoryCoverage, Preferences, PracticeSnapshot, ProfileSnapshot, RequestOptions } from '../types/app';
 import type { CFProblem, CFRatingChange, CFSubmission, CFUser, RecommendedProblem, CFContest } from '../types/codeforces';
 import { codeforcesApi, getProblemUrl, normalizeHandle } from './codeforcesApi';
-import { storageService } from './storage';
+import { getSyncStorage, storageService } from './storage';
+import {
+  clearSyncBackup,
+  mergeRestoredLedger,
+  parsePracticeBackupPayload,
+  readSyncBackup,
+  writeSyncBackup,
+  type CatalogLookup,
+  type SyncStorageAdapter,
+} from './ledgerBackup';
 import { calculateHabitProgress } from './habitTracker';
 import { enrichCatalog, computeProblemQuality } from '../recommender/catalog';
 import {
@@ -50,6 +59,7 @@ interface CachedProfile {
 interface BrokerOptions {
   api?: typeof codeforcesApi;
   storage?: Pick<typeof storageService, 'getValue' | 'setValue'>;
+  syncStorage?: SyncStorageAdapter;
   now?: () => number;
 }
 
@@ -68,6 +78,7 @@ function sanitizePreferences(raw: Partial<Preferences>): Preferences {
     dailyTarget: boundedNumber(raw.dailyTarget, 2, 1, 10),
     practiceMinutes: boundedNumber(raw.practiceMinutes, 60, 20, 240),
     practiceMode: raw.practiceMode === 'timed' || raw.practiceMode === 'guided' || raw.practiceMode === 'transfer' ? raw.practiceMode : 'adaptive',
+    lightDay: typeof raw.lightDay === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.lightDay) ? raw.lightDay : null,
     predictionParams: {
       dailyProblems: boundedNumber(params?.dailyProblems, 2, 1, 20),
       difficultyOffset: boundedNumber(params?.difficultyOffset, 150, -500, 1000),
@@ -102,6 +113,7 @@ export function selectRecommendations(problems: CFProblem[], rating: number, sol
 export function createDataBroker(options: BrokerOptions = {}) {
   const api = options.api ?? codeforcesApi;
   const storage = options.storage ?? storageService;
+  const syncStorage = options.syncStorage ?? (options.storage ? undefined : getSyncStorage());
   const now = options.now ?? Date.now;
   const locks = new Map<string, Promise<unknown>>();
   const profilesInFlight = new Map<string, Promise<ProfileSnapshot>>();
@@ -305,30 +317,37 @@ export function createDataBroker(options: BrokerOptions = {}) {
         if (catalog.status === 'rejected') errors.push(`Recommendations: ${errorMessage(catalog.reason)}`);
       }
       const ledger = await locked(ledgerKey(handle), async () => {
-        const currentLedger = await storage.getValue<PracticeLedger>(ledgerKey(handle)) ?? emptyLedger();
-        if (coverage.complete && profile?.status === 'fulfilled' && catalog?.status === 'fulfilled') {
-          if (profile.value.error) errors.push(profile.value.error);
-          if (catalog.value.error) errors.push(catalog.value.error);
-          const day = format(new Date(now()), 'yyyy-MM-dd');
-          const saved = await storage.getValue<PracticePlan>(planKey(handle));
-          const problemsCount = catalog.value.problems.length;
-          const contestsCount = catalog.value.contests?.length ?? 0;
+        const profileValue = profile?.status === 'fulfilled' ? profile.value : undefined;
+        const catalogValue = catalog?.status === 'fulfilled' ? catalog.value : undefined;
+        if (coverage.complete && profileValue && catalogValue) {
+          const problemsCount = catalogValue.problems.length;
+          const contestsCount = catalogValue.contests?.length ?? 0;
           if (
             !enrichedCache ||
-            enrichedCache.updatedAt !== catalog.value.updatedAt ||
+            enrichedCache.updatedAt !== catalogValue.updatedAt ||
             enrichedCache.problemsCount !== problemsCount ||
             enrichedCache.contestsCount !== contestsCount
           ) {
-            const enriched = enrichCatalog(catalog.value.problems, catalog.value.contests ?? []);
+            const enriched = enrichCatalog(catalogValue.problems, catalogValue.contests ?? []);
             enrichedCache = {
-              updatedAt: catalog.value.updatedAt,
+              updatedAt: catalogValue.updatedAt,
               problemsCount,
               contestsCount,
               enriched,
               enrichedMap: new Map(enriched.map(cp => [problemKey(cp), cp])),
             };
           }
-          const { enriched, enrichedMap } = enrichedCache;
+        }
+        const catalogLookup: CatalogLookup | undefined = enrichedCache
+          ? (k: string) => enrichedCache!.enrichedMap.get(k)
+          : undefined;
+        const currentLedger = await loadOrRestoreLedger(handle, catalogLookup);
+        if (coverage.complete && profileValue && catalogValue) {
+          if (profileValue.error) errors.push(profileValue.error);
+          if (catalogValue.error) errors.push(catalogValue.error);
+          const day = format(new Date(now()), 'yyyy-MM-dd');
+          const saved = await storage.getValue<PracticePlan>(planKey(handle));
+          const { enriched, enrichedMap } = enrichedCache!;
 
           // Pre-index earliest attempt time per problem so syncProblemRecord avoids redundant full-history scans
           const earliestSubSecByKey = new Map<string, number>();
@@ -338,14 +357,14 @@ export function createDataBroker(options: BrokerOptions = {}) {
             const prev = earliestSubSecByKey.get(k);
             if (prev === undefined || s.creationTimeSeconds < prev) earliestSubSecByKey.set(k, s.creationTimeSeconds);
           }
-          const hasRatings = profile.value.ratings.length > 0;
+          const hasRatings = profileValue.ratings.length > 0;
 
           // Sync past ledger records (assignments, events, and saved plan items) to the current model & catalog
           const historyCache = new Map<number, ReturnType<typeof prepareAcceptanceHistory>>();
           const getHistoryAt = (asOfMs: number) => {
             let h = historyCache.get(asOfMs);
             if (!h) {
-              h = prepareAcceptanceHistory(cached!.submissions, profile.value.ratings, asOfMs);
+              h = prepareAcceptanceHistory(cached!.submissions, profileValue.ratings, asOfMs);
               historyCache.set(asOfMs, h);
             }
             return h;
@@ -465,7 +484,7 @@ export function createDataBroker(options: BrokerOptions = {}) {
             }
           }
           // Also observe any outside problems solved today on Codeforces
-          const catalogMap = new Map(catalog.value.problems.map(cp => [problemKey(cp), cp]));
+          const catalogMap = new Map(catalogValue.problems.map(cp => [problemKey(cp), cp]));
           for (const s of cached!.submissions) {
             if (s.verdict === 'OK' && s.problem?.contestId && format(new Date(s.creationTimeSeconds * 1000), 'yyyy-MM-dd') === day) {
               const key = problemKey(s.problem);
@@ -536,9 +555,12 @@ export function createDataBroker(options: BrokerOptions = {}) {
             await storage.setValue(ledgerKey(handle), currentLedger);
           }
 
-          const state = buildPracticeState(cached!.submissions, profile.value.ratings, profile.value.user.rating, true, currentLedger.events, now());
+          const isLightDay = preferences.lightDay === day;
+          const state = buildPracticeState(cached!.submissions, profileValue.ratings, profileValue.user.rating, true, currentLedger.events, now());
           state.mode = preferences.practiceMode;
+          state.lightDay = isLightDay;
           const previous = saved?.version === 1 && saved.policy === POLICY_VERSION && saved.day === day ? savedItems : [];
+          const planMatchesLightDay = Boolean(saved?.lightDay) === isLightDay;
           const latest = latestEvents(currentLedger.events.filter(e => format(new Date(e.timestamp), 'yyyy-MM-dd') === day));
           const removed = new Set((currentLedger.removedSolves ?? []).filter(r => r.day === day).map(r => r.problemKey));
           const earlierAssistedKeys = new Set(
@@ -565,8 +587,10 @@ export function createDataBroker(options: BrokerOptions = {}) {
           const allFinished = [...finished, ...outsideProblems];
           const spent = allFinished.reduce((total, p) => total + p.plannedMinutes, 0)
             + [...latest.values()].filter(e => ['skipped', 'already-solved', 'timeout'].includes(e.outcome)).reduce((total, e) => total + (e.minutes ?? 0), 0);
-          const pending = previous.filter(p => !allFinished.some(f => problemKey(f) === problemKey(p)) && !latest.has(problemKey(p)));
-          const budget = Math.max(preferences.practiceMinutes ?? 60, preferences.dailyTarget * 30);
+          const pending = planMatchesLightDay
+            ? previous.filter(p => !allFinished.some(f => problemKey(f) === problemKey(p)) && !latest.has(problemKey(p)))
+            : [];
+          const budget = Math.max(preferences.practiceMinutes ?? 60, preferences.dailyTarget * 35);
           const remainingDailyTarget = Math.max(0, preferences.dailyTarget - allFinished.length);
           const formatLocalDay = (ms: number) => format(new Date(ms), 'yyyy-MM-dd');
           const pinnedReviewKeys = new Set(previous.filter(p => p.slot === 'revisit').map(problemKey));
@@ -584,10 +608,18 @@ export function createDataBroker(options: BrokerOptions = {}) {
             state,
             remainingDailyTarget,
             budget - spent,
-            pending.filter(p => p.slot !== 'revisit' && (state.mode === 'adaptive' || !state.mode ? !['timed','guided','transfer'].includes(p.slot) : p.slot === state.mode))
+            pending.filter(p =>
+              p.slot !== 'revisit' &&
+              (isLightDay
+                ? p.slot === 'warmup'
+                : state.mode === 'adaptive' || !state.mode
+                  ? !['timed', 'guided', 'transfer', 'warmup'].includes(p.slot)
+                  : p.slot === state.mode)
+            )
           );
           recommendations = [...reviews, ...regular];
           const plan: PracticePlan = { version: 1, policy: POLICY_VERSION, day, budget, target: preferences.dailyTarget,
+            ...(isLightDay ? { lightDay: true } : {}),
             items: [...allFinished, ...recommendations] };
           if (JSON.stringify(saved) !== JSON.stringify(plan)) {
             // Log assignments, not inferred views/clicks. IDs make retries idempotent.
@@ -636,11 +668,24 @@ export function createDataBroker(options: BrokerOptions = {}) {
 
   const ledgerKey = (handle: string) => `cfchart:learning:${handle.toLowerCase()}`;
   const planKey = (handle: string) => `cfchart:plan:${handle.toLowerCase()}`;
+  async function loadOrRestoreLedger(handle: string, lookup?: CatalogLookup): Promise<PracticeLedger> {
+    const local = await storage.getValue<PracticeLedger>(ledgerKey(handle));
+    const hasSelfReports = Boolean(local?.events.some(e => e.provenance === 'self-report'));
+    if (syncStorage && !hasSelfReports) {
+      const backup = await readSyncBackup(syncStorage, handle, lookup);
+      if (backup) {
+        const { ledger: restored } = mergeRestoredLedger(local ?? emptyLedger(), backup);
+        await storage.setValue(ledgerKey(handle), restored);
+        return restored;
+      }
+    }
+    return local ?? emptyLedger();
+  }
   async function recordPracticeFeedback(handle: string, feedback: PracticeFeedback): Promise<void> {
     handle = normalizeHandle(handle);
     validateFeedback(feedback);
     await locked(ledgerKey(handle), async () => {
-      const ledger = await storage.getValue<PracticeLedger>(ledgerKey(handle)) ?? emptyLedger();
+      const ledger = await loadOrRestoreLedger(handle);
       const duplicate = ledger.events.find(e => e.id === feedback.id);
       if (duplicate) { appendEvent(ledger, { ...duplicate, ...feedback, minutes: feedback.minutes ?? duplicate.minutes }); return; }
       const plan = await storage.getValue<PracticePlan>(planKey(handle));
@@ -687,10 +732,12 @@ export function createDataBroker(options: BrokerOptions = {}) {
       if (timer?.assistanceAtMs !== null && timer?.assistanceAtMs !== undefined && feedback.outcome === 'independent') throw new Error('Assistance was recorded. Choose an assisted outcome.');
       const elapsedMs = sessionElapsed(timer, now());
       const sessions = timer && !timer.stopped ? appendSession(ledger.sessions ?? [], { id: `${feedback.id}-stop`, at: now(), problemKey: feedback.problemKey, action: 'stop' }) : ledger.sessions;
-      await storage.setValue(ledgerKey(handle), appendEvent({ ...baseLedger, sessions }, { ...feedback,
+      const nextLedger = appendEvent({ ...baseLedger, sessions }, { ...feedback,
         ...(timer ? { timing: { source: 'explicit-timer' as const, elapsedMs, assistanceAtMs: timer.assistanceAtMs },
           minutes: feedback.minutes ?? elapsedMs / 60000 } : {}), version: 1, problem,
-        timestamp: now(), provenance: 'self-report' }));
+        timestamp: now(), provenance: 'self-report' });
+      await storage.setValue(ledgerKey(handle), nextLedger);
+      await writeSyncBackup(syncStorage, handle, nextLedger, now());
     });
   }
   async function practiceSession(handle: string, key: string, event?: { id: string; action: SessionAction }) {
@@ -747,20 +794,41 @@ export function createDataBroker(options: BrokerOptions = {}) {
   async function exportPracticeData(handle: string) {
     handle = normalizeHandle(handle);
     return locked(ledgerKey(handle), async () => {
-      const ledger = await storage.getValue<PracticeLedger>(ledgerKey(handle)) ?? emptyLedger();
+      const ledger = await loadOrRestoreLedger(handle);
       return { version: 1, handle, ledger, plan: await storage.getValue<PracticePlan>(planKey(handle)),
         recommendationFeedback: summarizeRecommendationFeedback(ledger) };
+    });
+  }
+  async function importPracticeData(handle: string, payload: unknown): Promise<{ importedEvents: number; totalEvents: number }> {
+    handle = normalizeHandle(handle);
+    return locked(ledgerKey(handle), async () => {
+      const cachedCatalog = await storage.getValue<CachedCatalog>('cfchart:catalog');
+      let lookup: CatalogLookup | undefined;
+      if (cachedCatalog?.problems?.length) {
+        const enriched = enrichCatalog(cachedCatalog.problems, cachedCatalog.contests ?? []);
+        const map = new Map(enriched.map(cp => [problemKey(cp), cp]));
+        lookup = (k: string) => map.get(k);
+      }
+      const parsed = parsePracticeBackupPayload(payload, lookup);
+      const current = await loadOrRestoreLedger(handle, lookup);
+      const { ledger: merged, addedEvents } = mergeRestoredLedger(current, parsed);
+      await storage.setValue(ledgerKey(handle), merged);
+      await storage.setValue(planKey(handle), null);
+      await writeSyncBackup(syncStorage, handle, merged, now());
+      return { importedEvents: addedEvents, totalEvents: merged.events.length };
     });
   }
   async function removeTodaySolve(handle: string, key: string): Promise<void> {
     handle = normalizeHandle(handle);
     if (!/^\d+-\w+$/.test(key)) throw new Error('Invalid problem key.');
     await locked(ledgerKey(handle), async () => {
-      const ledger = await storage.getValue<PracticeLedger>(ledgerKey(handle)) ?? emptyLedger();
+      const ledger = await loadOrRestoreLedger(handle);
       const day = format(new Date(now()), 'yyyy-MM-dd');
       const removedSolves = ledger.removedSolves ?? [];
       if (!removedSolves.some(r => r.day === day && r.problemKey === key)) {
-        await storage.setValue(ledgerKey(handle), { ...ledger, removedSolves: [...removedSolves, { day, problemKey: key }] });
+        const nextLedger = { ...ledger, removedSolves: [...removedSolves, { day, problemKey: key }] };
+        await storage.setValue(ledgerKey(handle), nextLedger);
+        await writeSyncBackup(syncStorage, handle, nextLedger, now());
       }
     });
   }
@@ -769,10 +837,11 @@ export function createDataBroker(options: BrokerOptions = {}) {
     await locked(ledgerKey(handle), async () => {
       await storage.setValue(ledgerKey(handle), emptyLedger());
       await storage.setValue(planKey(handle), null);
+      await clearSyncBackup(syncStorage, handle);
     });
   }
   return { getPreferences, updatePreferences, detectViewer, getProfile, getPractice,
-    recordPracticeFeedback, exportPracticeData, clearPracticeData, practiceSession, recordPracticeImpressions, removeTodaySolve };
+    recordPracticeFeedback, exportPracticeData, importPracticeData, clearPracticeData, practiceSession, recordPracticeImpressions, removeTodaySolve };
 }
 
 export const dataBroker = createDataBroker();

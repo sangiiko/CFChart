@@ -39,7 +39,7 @@ export const TopBarHabitPill: React.FC<Props> = ({ preferences, onPreferencesCha
       .catch(reason => { if (active) setError(reason instanceof Error ? reason.message : 'Practice data could not be loaded.'); })
       .finally(() => { activeFetchRef.current = false; if (active) setLoading(false); });
     return () => { active = false; };
-  }, [handle, preferences.dailyTarget, preferences.practiceMinutes, preferences.practiceMode, revision]);
+  }, [handle, preferences.dailyTarget, preferences.practiceMinutes, preferences.practiceMode, preferences.lightDay, revision]);
   useEffect(() => {
     if (!handle) return;
     let active = true;
@@ -79,6 +79,9 @@ export const TopBarHabitPill: React.FC<Props> = ({ preferences, onPreferencesCha
   const current = practice?.handle.toLowerCase() === handle?.toLowerCase() ? practice : null;
   const progress = current?.progress;
   const todayUnknown = progress?.recentDays[progress.recentDays.length - 1]?.unknown;
+  const nowDate = new Date();
+  const todayStr = `${nowDate.getFullYear()}-${String(nowDate.getMonth() + 1).padStart(2, '0')}-${String(nowDate.getDate()).padStart(2, '0')}`;
+  const isLightDay = preferences.lightDay === todayStr;
   const connect = async (event: React.FormEvent) => {
     event.preventDefault(); setBusy(true); setError('');
     try {
@@ -109,7 +112,21 @@ export const TopBarHabitPill: React.FC<Props> = ({ preferences, onPreferencesCha
           {current?.error && <p className="cf-notice" role="status">{current.error} Showing saved data.</p>}
           {current && !current.coverage.complete && <div className="cf-notice"><p>{current.coverage.loaded.toLocaleString()} submissions synced. Older activity is still unknown. Recommendations appear once the full solved history is checked.</p><button type="button" className="cf-link" disabled={loading} onClick={() => refresh(true)}>{loading ? 'Syncing…' : 'Sync more history'}</button></div>}
           {current?.coverage.complete && (
-            <PracticeRecommendations key={handle} handle={handle} recommendations={current.recommendations} onFeedbackRecorded={() => setRevision(value => value + 1)} />
+            <PracticeRecommendations
+              key={handle}
+              handle={handle}
+              recommendations={current.recommendations}
+              lightDay={isLightDay}
+              onToggleLightDay={async () => {
+                setError('');
+                try {
+                  await onPreferencesChange({ lightDay: isLightDay ? null : todayStr });
+                } catch (reason) {
+                  setError(reason instanceof Error ? reason.message : 'Could not update light day mode.');
+                }
+              }}
+              onFeedbackRecorded={() => setRevision(value => value + 1)}
+            />
           )}
         </>}
         <div className="cf-popover-footer"><a href={`/profile/${encodeURIComponent(handle)}`}>View your rating chart ↗</a><button type="button" className="cf-link" disabled={loading} onClick={() => refresh()}>{loading ? 'Refreshing…' : 'Refresh'}</button></div><div className="cf-personal-footer"><button type="button" className="cf-link" onClick={() => { setInput(handle); setSettingHandle(true); }}>Change handle</button>{current && <span>{current.stale ? 'Cached · ' : ''}{new Date(current.updatedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</span>}</div>

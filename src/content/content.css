@@ -116,13 +116,19 @@
 
 /* Recommendation cards shared in meaning with popup cards */
 .cf-popover .practice-session{margin-top:16px;font-size:13px}
-.cf-popover .practice-session-heading{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:9px}
+.cf-popover .practice-session-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}
+.cf-popover .practice-session-meta{display:flex;align-items:center;gap:7px}
 .cf-popover .practice-session-heading h2{font-size:15px}
 .cf-popover .practice-session-heading span{color:var(--cf-muted);font-size:11px}
+.cf-popover .practice-light-toggle{min-height:24px;padding:2px 8px;border:1px solid var(--cf-border);border-radius:14px;background:var(--cf-surface);color:var(--cf-muted);font-size:11px;font-weight:600}
+.cf-popover .practice-light-toggle:hover{border-color:#9fb4c8;color:var(--cf-text);background:var(--cf-soft)}
+.cf-popover .practice-light-toggle.is-active{border-color:#8dbce0;background:#ebf4fc;color:#1d527f}
 .cf-popover .practice-task{margin:0 0 10px;padding:13px;border:1px solid var(--cf-border);border-radius:var(--cf-radius);background:var(--cf-surface)}
 .cf-popover .practice-task--revisit{border-color:#d9c8a9;background:#fffdf8}
+.cf-popover .practice-task--warmup{border-color:#c6dced;background:#f8fbfe}
 .cf-popover .practice-task-meta{display:flex;flex-wrap:wrap;align-items:center;gap:4px 9px;margin-bottom:6px;color:var(--cf-muted);font-size:11px}
 .cf-popover .practice-task-badge--revisit{padding:1px 6px;border:1px solid #e4c78f;border-radius:4px;background:#fff7e8;color:#765319;font-weight:650}
+.cf-popover .practice-task-badge--warmup{padding:1px 6px;border:1px solid #b8d4ea;border-radius:4px;background:#eaf4fc;color:#1d527f;font-weight:650}
 .cf-popover .practice-task h3{margin:0 0 4px;font-size:14px;overflow-wrap:anywhere}
 .cf-popover .practice-task-reason{color:var(--cf-muted);font-size:12px}
 .cf-popover .practice-task-actions{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-top:10px}

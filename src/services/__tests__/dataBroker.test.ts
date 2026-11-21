@@ -110,7 +110,7 @@ describe('resumable submission history', () => {
     expect(api.fetchSubmissionPage).toHaveBeenLastCalledWith('alice', 1001, 1000);
     expect(complete.coverage.complete).toBe(true);
     expect(complete.coverage.loaded).toBe(1002);
-    expect(complete.recommendations).toHaveLength(1);
+    expect(complete.recommendations).toHaveLength(2);
   });
 
   it('abandons a misleading complete flag if a refreshed page has no overlap', async () => {
@@ -285,8 +285,8 @@ describe('adaptive practice sessions', () => {
     const { broker } = fixture();
     const first = await broker.getPractice('alice');
     const p = first.recommendations[0];
-    await broker.recordPracticeFeedback('alice', { id: 'skip-1', problemKey: `${p.contestId}-${p.index}`, outcome: 'skipped', minutes: 30 });
-    expect((await broker.getPractice('alice')).recommendations).toEqual([]); // Remaining stretch needs 40 minutes.
+    await broker.recordPracticeFeedback('alice', { id: 'skip-1', problemKey: `${p.contestId}-${p.index}`, outcome: 'skipped', minutes: 35 });
+    expect((await broker.getPractice('alice')).recommendations).toEqual([]); // Remaining stretch needs 40 minutes (budget 70 - 35 = 35).
   });
 
   it('rejects unknown assignments and invalid feedback without modifying the ledger', async () => {
@@ -397,7 +397,7 @@ describe('review regressions', () => {
     const reviewKey = `${first.contestId}-${first.index}`;
     await broker.recordPracticeFeedback('alice', { id: 'assisted-1', problemKey: reviewKey, outcome: 'assisted' });
 
-    advance(4 * 86400000);
+    advance(7 * 86400000);
     // Satisfy today's dailyTarget=1 with a new outside solve
     api.fetchSubmissionPage.mockResolvedValue([submission(2999)]);
     const snap = await broker.getPractice('alice', { force: true });
@@ -568,8 +568,8 @@ describe('review regressions', () => {
       });
     }
 
-    // Advance 4 days so all 5 become due
-    advance(4 * 86400000);
+    // Advance 7 days so all 5 become due under the 6-day initial review schedule
+    advance(7 * 86400000);
     const dueSnap = await broker.getPractice('alice', { force: true });
     const dueReviews = dueSnap.recommendations.filter(r => r.slot === 'revisit');
     // Strictly capped to 1 review per day instead of flooding all 5
@@ -678,5 +678,100 @@ describe('sync performance and wrong-answer handling', () => {
 
     resolveFetch([]);
     await pendingPractice;
+  });
+});
+
+describe('light day mode and persistent backup/restore', () => {
+  it('switches to below-rating warmups on a light day and auto-resets the next day', async () => {
+    const { broker, api, advance } = fixture();
+    api.fetchProblemCatalog.mockResolvedValue([
+      { contestId: 10, index: 'A', name: 'EasyWarmup', rating: 1200, tags: ['implementation'] },
+      { contestId: 11, index: 'A', name: 'CoreTask', rating: 1400, tags: ['dp'] },
+      { contestId: 12, index: 'A', name: 'StretchTask', rating: 1500, tags: ['graphs'] },
+    ]);
+    await broker.updatePreferences({ personalHandle: 'alice', dailyTarget: 2 });
+    const normal = await broker.getPractice('alice');
+    expect(normal.recommendations.map(r => r.slot)).toEqual(['core', 'stretch']);
+
+    await broker.updatePreferences({ lightDay: '2026-11-10' });
+    const light = await broker.getPractice('alice', { force: true });
+    expect(light.recommendations.length).toBeGreaterThan(0);
+    expect(light.recommendations.every(r => r.slot === 'warmup' && r.rating <= 1400)).toBe(true);
+    expect(light.recommendations[0].rating).toBe(1200);
+
+    // Next local day automatically returns to normal adaptive core + stretch
+    advance(86400000);
+    const nextDay = await broker.getPractice('alice', { force: true });
+    expect(nextDay.recommendations.map(r => r.slot)).toEqual(['core', 'stretch']);
+  });
+
+  it('auto-backs up self-reported review/feedback events to sync storage and restores after local wipe', async () => {
+    const syncStore = new Map<string, unknown>();
+    const syncStorage = {
+      async get(keys: string | string[]) {
+        const list = Array.isArray(keys) ? keys : [keys];
+        return Object.fromEntries(list.filter(k => syncStore.has(k)).map(k => [k, structuredClone(syncStore.get(k))]));
+      },
+      async set(items: Record<string, unknown>) {
+        for (const [k, v] of Object.entries(items)) syncStore.set(k, structuredClone(v));
+      },
+      async remove(keys: string | string[]) {
+        for (const k of Array.isArray(keys) ? keys : [keys]) syncStore.delete(k);
+      },
+    };
+    const localStore = new Map<string, unknown>();
+    const storage = {
+      async getValue<T>(key: string) { return localStore.get(key) as T | undefined; },
+      async setValue<T>(key: string, value: T) { localStore.set(key, structuredClone(value)); },
+    };
+    let clock = new Date(2026, 10, 10, 12).getTime();
+    const api = {
+      fetchUserInfo: vi.fn(async (handle: string) => ({ handle, rating: 1400 })),
+      fetchUserRatingHistory: vi.fn(async () => [{ contestId: 1, contestName: 'R1', handle: 'alice', rank: 1, ratingUpdateTimeSeconds: 1000, oldRating: 0, newRating: 1400 }]),
+      fetchSubmissionPage: vi.fn(async (): Promise<CFSubmission[]> => []),
+      fetchProblemCatalog: vi.fn(async (): Promise<CFProblem[]> => [
+        { contestId: 10, index: 'A', name: 'ReviewMe', rating: 1400, tags: ['dp'] },
+        { contestId: 11, index: 'A', name: 'NextCore', rating: 1300, tags: ['graphs'] },
+      ]),
+      fetchContestList: vi.fn(async () => []),
+    };
+    const broker = createDataBroker({ api, storage, syncStorage, now: () => clock });
+    await broker.updatePreferences({ personalHandle: 'alice', dailyTarget: 1 });
+    await broker.getPractice('alice');
+    await broker.recordPracticeFeedback('alice', { id: 'assist-10A', problemKey: '10-A', outcome: 'assisted', minutes: 42 });
+
+    // Simulate uninstall + reinstall: local storage is completely wiped, sync storage survives
+    localStore.clear();
+    clock += 7 * 86400000;
+    const brokerAfterReinstall = createDataBroker({ api, storage, syncStorage, now: () => clock });
+    await brokerAfterReinstall.updatePreferences({ personalHandle: 'alice', dailyTarget: 1 });
+    const restored = await brokerAfterReinstall.getPractice('alice', { force: true });
+    expect(restored.recommendations.some(r => r.contestId === 10 && r.index === 'A' && r.slot === 'revisit')).toBe(true);
+
+    // Explicit clear removes both local and sync backups
+    await brokerAfterReinstall.clearPracticeData('alice');
+    localStore.clear();
+    const afterClear = await brokerAfterReinstall.exportPracticeData('alice');
+    expect(afterClear.ledger.events).toEqual([]);
+  });
+
+  it('supports idempotent JSON export and import restore', async () => {
+    const { broker } = fixture();
+    await broker.updatePreferences({ personalHandle: 'alice', dailyTarget: 1 });
+    const snap = await broker.getPractice('alice');
+    const first = snap.recommendations[0];
+    await broker.recordPracticeFeedback('alice', { id: 'ev-1', problemKey: `${first.contestId}-${first.index}`, outcome: 'assisted', minutes: 40 });
+    const backup = await broker.exportPracticeData('alice');
+
+    await broker.clearPracticeData('alice');
+    expect((await broker.exportPracticeData('alice')).ledger.events).toHaveLength(0);
+
+    const firstImport = await broker.importPracticeData('alice', backup);
+    expect(firstImport.importedEvents).toBe(1);
+    expect(firstImport.totalEvents).toBe(1);
+
+    const duplicateImport = await broker.importPracticeData('alice', backup);
+    expect(duplicateImport.importedEvents).toBe(0);
+    expect(duplicateImport.totalEvents).toBe(1);
   });
 });

@@ -51,6 +51,7 @@ export interface PracticePlan {
   day: string;
   budget: number;
   target: number;
+  lightDay?: boolean;
   items: RecommendedProblem[];
 }
 export interface TagDifficultyStats {
@@ -74,6 +75,7 @@ export interface UserPracticeState {
   events: PracticeEvent[];
   now: number;
   mode?: 'adaptive' | 'timed' | 'guided' | 'transfer';
+  lightDay?: boolean;
   acceptanceHistory?: AcceptanceHistory | null;
 }
 export interface SkillProfile {

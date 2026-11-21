@@ -54,6 +54,8 @@ async function handleRequest(message: ExtensionRequest): Promise<ExtensionRespon
         return { ok: true, data: undefined };
       case 'exportPracticeData':
         return { ok: true, data: await dataBroker.exportPracticeData(message.handle) };
+      case 'importPracticeData':
+        return { ok: true, data: await dataBroker.importPracticeData(message.handle, message.payload) };
       case 'clearPracticeData':
         await dataBroker.clearPracticeData(message.handle);
         return { ok: true, data: undefined };

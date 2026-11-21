@@ -1,6 +1,6 @@
 import { PracticeRecommendations } from '../components/PracticeRecommendations';
-import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
-import { getPreferences, getPractice, getProfile, subscribeToChanges, updatePreferences } from '../services/extensionClient';
+import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { exportPracticeData, getPreferences, getPractice, getProfile, importPracticeData, subscribeToChanges, updatePreferences } from '../services/extensionClient';
 import type { PracticeSnapshot, Preferences } from '../types/app';
 import { getExtensionApi } from '../services/storage';
 import './styles.css';
@@ -13,6 +13,8 @@ export function PracticeApp({ fullPage = false }: { fullPage?: boolean }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
+  const [backupMessage, setBackupMessage] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const request = useRef(0);
   const inFlight = useRef(false);
   const lastCompletedAt = useRef(0);
@@ -99,6 +101,59 @@ export function PracticeApp({ fullPage = false }: { fullPage?: boolean }) {
   const personalHandle = preferences?.personalHandle;
   const snapshot = practice?.handle.toLowerCase() === personalHandle?.toLowerCase() ? practice : null;
   const progress = snapshot?.progress;
+  const nowDate = new Date();
+  const todayStr = `${nowDate.getFullYear()}-${String(nowDate.getMonth() + 1).padStart(2, '0')}-${String(nowDate.getDate()).padStart(2, '0')}`;
+  const isLightDay = preferences?.lightDay === todayStr;
+
+  async function toggleLightDay() {
+    setError('');
+    try {
+      const next = await updatePreferences({ lightDay: isLightDay ? null : todayStr });
+      setPreferences(next);
+      await load({ silent: true });
+    } catch (reason) {
+      setError(message(reason));
+    }
+  }
+
+  async function handleExportBackup() {
+    if (!personalHandle) return;
+    setError('');
+    setBackupMessage('');
+    try {
+      const data = await exportPracticeData(personalHandle);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `cfchart-backup-${personalHandle}-${todayStr}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setBackupMessage('Backup exported.');
+    } catch (reason) {
+      setError(message(reason));
+    }
+  }
+
+  async function handleImportBackup(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !personalHandle) return;
+    setError('');
+    setBackupMessage('');
+    try {
+      const parsed = JSON.parse(await file.text()) as unknown;
+      const result = await importPracticeData(personalHandle, parsed);
+      setBackupMessage(
+        result.importedEvents > 0
+          ? `Restored ${result.importedEvents} event${result.importedEvents === 1 ? '' : 's'}.`
+          : 'Backup already up to date.'
+      );
+      await load();
+    } catch (reason) {
+      setError(message(reason));
+    }
+  }
 
   return (
     <main className={`practice-app${fullPage ? ' practice-app--page' : ''}`}>
@@ -149,7 +204,7 @@ export function PracticeApp({ fullPage = false }: { fullPage?: boolean }) {
 
           {snapshot && !snapshot.coverage.complete && <div className="notice"><strong>History sync in progress</strong><p>{snapshot.coverage.loaded.toLocaleString()} submissions loaded. Older activity is still unknown; recommendations appear after the solved history is checked.</p><button className="button" disabled={loading} onClick={() => void load({ syncMore: true })}>{loading ? 'Syncing…' : 'Continue history sync'}</button></div>}
 
-          <div id="practice">{snapshot?.coverage.complete && <PracticeRecommendations key={personalHandle} handle={personalHandle} recommendations={snapshot.recommendations} expandedByDefault={fullPage} onFeedbackRecorded={() => void load()} />}</div>
+          <div id="practice">{snapshot?.coverage.complete && <PracticeRecommendations key={personalHandle} handle={personalHandle} recommendations={snapshot.recommendations} expandedByDefault={fullPage} lightDay={isLightDay} onToggleLightDay={() => void toggleLightDay()} onFeedbackRecorded={() => void load()} />}</div>
 
           {!fullPage && <div className="button-row app-secondary-actions"><a className="text-button" href={getExtensionApi()?.runtime.getURL?.('dashboard.html') ?? 'dashboard.html'} target="_blank" rel="noreferrer">Open dashboard ↗</a><button className="text-button" disabled={loading} onClick={() => void load({ force: true })}>{loading ? 'Syncing…' : 'Refresh'}</button></div>}
           </div>
@@ -161,7 +216,7 @@ export function PracticeApp({ fullPage = false }: { fullPage?: boolean }) {
               <p className="muted">Patterned days have not been fully synced.</p>
               <details className="heatmap-data"><summary>Daily counts</summary><ul>{progress.recentDays.map(day => <li key={day.dateStr}>{day.dateStr}: {day.unknown ? 'history unknown' : `${day.solvedCount} accepted problems`}</li>)}</ul></details>
             </> : <p className="muted">Practice history is loading.</p>}</section>
-            <section className="dashboard-panel" id="settings" aria-label="Account and settings"><h2>Account</h2><p>Tracked handle: <strong>@{personalHandle}</strong></p><p className="muted">Distinct accepted problems count once per local day.</p><div className="button-row"><button className="button" onClick={() => setEditing(true)}>Edit settings</button><button className="button" disabled={loading} onClick={() => void load({ force: true })}>{loading ? 'Syncing…' : 'Refresh data'}</button></div><a className="text-button" href={`https://codeforces.com/profile/${encodeURIComponent(personalHandle)}`} target="_blank" rel="noreferrer">View rating chart ↗</a></section>
+            <section className="dashboard-panel" id="settings" aria-label="Account and settings"><h2>Account</h2><p>Tracked handle: <strong>@{personalHandle}</strong></p><p className="muted">Distinct accepted problems count once per local day. Reviews and feedback auto-backup via browser sync.</p><div className="button-row"><button className="button" onClick={() => setEditing(true)}>Edit settings</button><button className="button" disabled={loading} onClick={() => void load({ force: true })}>{loading ? 'Syncing…' : 'Refresh data'}</button></div><div className="button-row"><button type="button" className="button" onClick={() => void handleExportBackup()}>Export backup</button><button type="button" className="button" onClick={() => fileInputRef.current?.click()}>Import backup</button><input ref={fileInputRef} type="file" accept="application/json,.json" hidden onChange={event => void handleImportBackup(event)} /></div>{backupMessage && <p className="muted" role="status">{backupMessage}</p>}<a className="text-button" href={`https://codeforces.com/profile/${encodeURIComponent(personalHandle)}`} target="_blank" rel="noreferrer">View rating chart ↗</a></section>
           </aside>}
         </div>
       )}
